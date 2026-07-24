@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="LOG_DIR">${sys:link.up.log.dir:-${env:LINK_UP_LOG_DIR:-logs}}</Property>
+        <Property name="LOG_FILE">${sys:link.up.log.file:-${env:LOGFILE:-${LOG_DIR}/link-up.log}}</Property>
+        <Property name="JOB_LOG_DIR">${sys:link.up.job.log.dir:-${env:LINK_UP_JOB_LOG_DIR:-${LOG_DIR}/jobs}}</Property>
+        <Property name="PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] [%X{jobId}] %c{1.} - %msg%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${PATTERN}"/>
+        </Console>
+
+        <RollingFile name="ServerFile"
+                     fileName="${LOG_FILE}"
+                     filePattern="${LOG_FILE}.%d{yyyy-MM-dd}-%i.gz">
+            <PatternLayout pattern="${PATTERN}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy/>
+                <SizeBasedTriggeringPolicy size="100 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="14"/>
+        </RollingFile>
+
+        <Null name="NoJobFile"/>
+
+        <Routing name="JobFiles">
+            <Routes pattern="$${ctx:jobLogFile:-__NO_JOB__}">
+                <Route key="__NO_JOB__" ref="NoJobFile"/>
+                <Route>
+                    <RollingFile name="JobFile-$${ctx:jobLogFile}"
+                                 fileName="${JOB_LOG_DIR}/$${ctx:jobLogFile}"
+                                 filePattern="${JOB_LOG_DIR}/archive/$${ctx:jobLogFile}.%d{yyyy-MM-dd}-%i.gz">
+                        <PatternLayout pattern="${PATTERN}"/>
+                        <Policies>
+                            <TimeBasedTriggeringPolicy/>
+                            <SizeBasedTriggeringPolicy size="100 MB"/>
+                        </Policies>
+                        <DefaultRolloverStrategy max="14"/>
+                    </RollingFile>
+                </Route>
+            </Routes>
+            <IdlePurgePolicy timeToLive="60"
+                             checkInterval="60"
+                             timeUnit="MINUTES"/>
+        </Routing>
+    </Appenders>
+
+    <Loggers>
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ServerFile"/>
+            <AppenderRef ref="JobFiles"/>
+        </Root>
+    </Loggers>
+</Configuration>
