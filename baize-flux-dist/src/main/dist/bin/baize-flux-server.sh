@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Runs one local, batch Baize Flux job in the foreground.
+# Starts Baize Flux Server in the foreground.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BAIZE_FLUX_HOME="${BAIZE_FLUX_HOME:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 CONF_DIR="${BAIZE_FLUX_CONF_DIR:-${BAIZE_FLUX_HOME}/config}"
 LOG_DIR="${BAIZE_FLUX_LOG_DIR:-${BAIZE_FLUX_HOME}/logs}"
-LOGFILE="${LOGFILE:-${LOG_DIR}/baize-flux.log}"
+LOGFILE="${LOGFILE:-${LOG_DIR}/baize-flux-server.log}"
 JOB_LOG_DIR="${BAIZE_FLUX_JOB_LOG_DIR:-${LOG_DIR}/jobs}"
 JAVA_BIN="${JAVA_HOME:+${JAVA_HOME}/bin/}java"
 
@@ -16,10 +16,6 @@ if ! command -v "${JAVA_BIN}" >/dev/null 2>&1; then
 fi
 
 mkdir -p "$(dirname "${LOGFILE}")" "${JOB_LOG_DIR}"
-
-if [[ $# -eq 0 ]]; then
-  set -- --config "${CONF_DIR}/baize-flux.yaml"
-fi
 
 JAVA_OPTS=(
   -Xms256m
@@ -40,5 +36,5 @@ fi
 exec "${JAVA_BIN}" \
   "${JAVA_OPTS[@]}" \
   -cp "${BAIZE_FLUX_HOME}/lib/*" \
-  com.baize.flux.launcher.LocalSyncLauncher \
+  com.baize.flux.server.FluxServer \
   "$@"

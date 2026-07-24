@@ -2,12 +2,18 @@ package com.baize.flux.framework.execution;
 
 import com.baize.flux.framework.execution.task.ExecutionTask;
 import com.baize.flux.framework.metrics.TaskMetrics;
+import org.apache.logging.log4j.CloseableThreadContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.ThreadContext;
 
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -16,7 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class TaskExecutor
         implements AutoCloseable {
 
-    private static final Logger LOG = LogManager.getLogger(TaskExecutor.class);
+    private static final Logger LOG =
+            LogManager.getLogger(
+                    TaskExecutor.class);
 
     private final ExecutorService executorService;
 
@@ -31,7 +39,11 @@ public final class TaskExecutor
             int threadCount,
             final String threadPrefix) {
 
-        this(threadCount, threadPrefix, "unnamed", System.currentTimeMillis());
+        this(
+                threadCount,
+                threadPrefix,
+                "unnamed",
+                System.currentTimeMillis());
     }
 
     public TaskExecutor(
@@ -45,10 +57,16 @@ public final class TaskExecutor
                     "threadCount must be greater than 0");
         }
 
-        this.jobName = Objects.requireNonNull(jobName, "jobName must not be null");
-        if (runId < 0) {
-            throw new IllegalArgumentException("runId must not be negative");
+        this.jobName =
+                Objects.requireNonNull(
+                        jobName,
+                        "jobName must not be null");
+
+        if (runId < 0L) {
+            throw new IllegalArgumentException(
+                    "runId must not be negative");
         }
+
         this.runId = runId;
 
         final AtomicInteger sequence =
@@ -96,93 +114,136 @@ public final class TaskExecutor
                 context,
                 "context must not be null");
 
+        final String jobId =
+                JobLogFileName.createJobId(
+                        jobName,
+                        runId);
+
+        final String jobLogFile =
+                JobLogFileName.create(
+                        jobName,
+                        runId);
+
         return completionService.submit(
                 new Callable<TaskResult>() {
                     @Override
                     public TaskResult call() {
+                        try (CloseableThreadContext.Instance ignored =
+                                     CloseableThreadContext
+                                             .put(
+                                                     "jobId",
+                                                     jobId)
+                                             .put(
+                                                     "jobName",
+                                                     jobName)
+                                             .put(
+                                                     "jobLogFile",
+                                                     jobLogFile)) {
 
-                        String taskLogFile = TaskLogFileName.create(jobName, task.getTaskId(), runId);
-                        ThreadContext.put("taskLogFile", taskLogFile);
-
-                        TaskMetrics metrics =
-                                context.getMetrics();
-
-                        if (context
-                                .getCancellationToken()
-                                .isCancelled()) {
-
-                            metrics.markFinished(
-                                    TaskState.CANCELED);
-
-                            LOG.info("Task cancelled before execution: {}", task.getTaskId());
-                            ThreadContext.remove("taskLogFile");
-                            return TaskResult.canceled(
-                                    task.getTaskId(),
-                                    context
-                                            .getCancellationToken()
-                                            .getCause());
-                        }
-
-                        metrics.markStarted();
-                        LOG.info("Task started: {}", task.getTaskId());
-
-                        try {
-                            task.execute(context);
-
-                            if (context
-                                    .getCancellationToken()
-                                    .isCancelled()) {
-
-                                metrics.markFinished(
-                                        TaskState.CANCELED);
-
-                                LOG.info("Task cancelled: {}", task.getTaskId());
-                                return TaskResult.canceled(
-                                        task.getTaskId(),
-                                        context
-                                                .getCancellationToken()
-                                                .getCause());
-                            }
-
-                            metrics.markFinished(
-                                    TaskState.FINISHED);
-
-                            LOG.info("Task finished: {}", task.getTaskId());
-                            return TaskResult.finished(
-                                    task.getTaskId());
-
-                        } catch (Throwable throwable) {
-                            if (context
-                                    .getCancellationToken()
-                                    .isCancelled()
-                                    && throwable
-                                    instanceof InterruptedException) {
-
-                                Thread.currentThread()
-                                        .interrupt();
-
-                                metrics.markFinished(
-                                        TaskState.CANCELED);
-
-                                LOG.info("Task cancelled: {}", task.getTaskId());
-                                return TaskResult.canceled(
-                                        task.getTaskId(),
-                                        throwable);
-                            }
-
-                            metrics.markFinished(
-                                    TaskState.FAILED);
-
-                            LOG.error("Task failed: " + task.getTaskId(), throwable);
-
-                            return TaskResult.failed(
-                                    task.getTaskId(),
-                                    throwable);
-                        } finally {
-                            ThreadContext.remove("taskLogFile");
+                            return executeTask(
+                                    task,
+                                    context);
                         }
                     }
                 });
+    }
+
+    private TaskResult executeTask(
+            ExecutionTask task,
+            TaskContext context) {
+
+        TaskMetrics metrics =
+                context.getMetrics();
+
+        if (context
+                .getCancellationToken()
+                .isCancelled()) {
+
+            metrics.markFinished(
+                    TaskState.CANCELED);
+
+            LOG.info(
+                    "Task cancelled before execution: {}",
+                    task.getTaskId());
+
+            return TaskResult.canceled(
+                    task.getTaskId(),
+                    context
+                            .getCancellationToken()
+                            .getCause());
+        }
+
+        metrics.markStarted();
+
+        LOG.info(
+                "Task started: {}",
+                task.getTaskId());
+
+        try {
+            task.execute(context);
+
+            if (context
+                    .getCancellationToken()
+                    .isCancelled()) {
+
+                metrics.markFinished(
+                        TaskState.CANCELED);
+
+                LOG.info(
+                        "Task cancelled: {}",
+                        task.getTaskId());
+
+                return TaskResult.canceled(
+                        task.getTaskId(),
+                        context
+                                .getCancellationToken()
+                                .getCause());
+            }
+
+            metrics.markFinished(
+                    TaskState.FINISHED);
+
+            LOG.info(
+                    "Task finished: {}",
+                    task.getTaskId());
+
+            return TaskResult.finished(
+                    task.getTaskId());
+
+        } catch (Throwable throwable) {
+            if (context
+                    .getCancellationToken()
+                    .isCancelled()
+                    && throwable
+                    instanceof InterruptedException) {
+
+                Thread.currentThread()
+                        .interrupt();
+
+                metrics.markFinished(
+                        TaskState.CANCELED);
+
+                LOG.info(
+                        "Task cancelled: {}",
+                        task.getTaskId());
+
+                return TaskResult.canceled(
+                        task.getTaskId(),
+                        throwable);
+            }
+
+            metrics.markFinished(
+                    TaskState.FAILED);
+
+            LOG.error(
+                    "Task failed: "
+                            + task.getTaskId(),
+                    throwable);
+
+            return TaskResult.failed(
+                    task.getTaskId(),
+                    throwable);
+        }
     }
 
     public Future<TaskResult> takeCompleted()
@@ -203,7 +264,9 @@ public final class TaskExecutor
                 executorService.shutdownNow();
             }
         } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
+            Thread.currentThread()
+                    .interrupt();
+
             executorService.shutdownNow();
         }
     }

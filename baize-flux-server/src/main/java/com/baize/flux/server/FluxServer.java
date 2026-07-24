@@ -10,21 +10,29 @@ import com.baize.flux.server.runtime.LocalJobExecutor;
 import com.baize.flux.server.runtime.LocalJobIdGenerator;
 import com.baize.flux.server.runtime.LocalJobManager;
 import com.baize.flux.server.service.JobRestService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Baize Flux REST Server 启动入口。
  */
 public final class FluxServer {
 
+    private static final String LOG_FILE_PROPERTY =
+            "baize.flux.log.file";
+
+    static {
+        configureDefaultLogFile();
+    }
+
     private static final Logger LOG =
-            Logger.getLogger(
-                    FluxServer.class.getName());
+            LogManager.getLogger(
+                    FluxServer.class);
 
     private FluxServer() {
     }
@@ -86,8 +94,7 @@ public final class FluxServer {
                         try {
                             server.stop();
                         } catch (Exception exception) {
-                            LOG.log(
-                                    Level.WARNING,
+                            LOG.warn(
                                     "Failed to stop HTTP server",
                                     exception);
                         }
@@ -109,15 +116,11 @@ public final class FluxServer {
             server.start();
 
             LOG.info(
-                    "Baize Flux Server started"
-                            + ", host="
-                            + config.getHost()
-                            + ", port="
-                            + server.getLocalPort()
-                            + ", jobThreads="
-                            + config.getJobThreads()
-                            + ", pluginDirectories="
-                            + config.getPluginDirectories());
+                    "Baize Flux Server started, host={}, port={}, jobThreads={}, pluginDirectories={}",
+                    config.getHost(),
+                    server.getLocalPort(),
+                    config.getJobThreads(),
+                    config.getPluginDirectories());
 
             server.join();
         } finally {
@@ -131,5 +134,47 @@ public final class FluxServer {
                 // JVM 已经进入关闭流程。
             }
         }
+    }
+
+    /**
+     * IDEA 直接启动 Server 时也提供稳定的默认日志文件。
+     *
+     * <p>显式 JVM 参数或 LOGFILE 环境变量优先级更高。
+     */
+    private static void configureDefaultLogFile() {
+        if (hasText(
+                System.getProperty(
+                        LOG_FILE_PROPERTY))
+                || hasText(
+                System.getenv(
+                        "LOGFILE"))) {
+            return;
+        }
+
+        String logDirectory =
+                System.getProperty(
+                        "baize.flux.log.dir");
+
+        if (!hasText(logDirectory)) {
+            logDirectory =
+                    System.getenv(
+                            "BAIZE_FLUX_LOG_DIR");
+        }
+
+        if (!hasText(logDirectory)) {
+            logDirectory = "logs";
+        }
+
+        System.setProperty(
+                LOG_FILE_PROPERTY,
+                Paths.get(
+                                logDirectory,
+                                "baize-flux-server.log")
+                        .toString());
+    }
+
+    private static boolean hasText(String value) {
+        return value != null
+                && !value.trim().isEmpty();
     }
 }

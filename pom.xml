@@ -31,7 +31,7 @@
         <auto-service.version>1.0.1</auto-service.version>
         <lombok.version>1.18.42</lombok.version>
         <typesafe.version>1.4.3</typesafe.version>
-        <log4j2.version>2.17.2</log4j2.version>
+        <log4j2.version>2.23.1</log4j2.version>
         <slf4j.version>2.0.13</slf4j.version>
         <jsqlparser.version>4.9</jsqlparser.version>
 
