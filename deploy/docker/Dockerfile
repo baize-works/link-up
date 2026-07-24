@@ -1,13 +1,13 @@
-# Build first: mvn -pl baize-flux-dist -am package
+# Build first: mvn -pl link-up-dist -am package
 FROM eclipse-temurin:8-jre
-ARG BAIZE_FLUX_VERSION=1.0.0
+ARG LINK_UP_VERSION=1.0.0
 WORKDIR /opt
-COPY baize-flux-dist/target/baize-flux-${BAIZE_FLUX_VERSION}.tar.gz /tmp/baize-flux.tar.gz
-RUN tar -xzf /tmp/baize-flux.tar.gz -C /opt && mv /opt/baize-flux-${BAIZE_FLUX_VERSION} /opt/baize-flux && rm /tmp/baize-flux.tar.gz \
-    && useradd --system --uid 10001 --create-home baizeflux \
-    && mkdir -p /opt/baize-flux/logs && chown -R baizeflux:baizeflux /opt/baize-flux
-USER baizeflux
-ENV BAIZE_FLUX_HOME=/opt/baize-flux
-WORKDIR /opt/baize-flux
-ENTRYPOINT ["/opt/baize-flux/bin/baize-flux.sh"]
-CMD ["--config", "/opt/baize-flux/config/baize-flux.yaml"]
+COPY link-up-dist/target/link-up-${LINK_UP_VERSION}.tar.gz /tmp/link-up.tar.gz
+RUN tar -xzf /tmp/link-up.tar.gz -C /opt && mv /opt/link-up-${LINK_UP_VERSION} /opt/link-up && rm /tmp/link-up.tar.gz \
+    && useradd --system --uid 10001 --create-home linkup \
+    && mkdir -p /opt/link-up/logs && chown -R linkup:linkup /opt/link-up
+USER linkup
+ENV LINK_UP_HOME=/opt/link-up
+WORKDIR /opt/link-up
+ENTRYPOINT ["/opt/link-up/bin/link-up.sh"]
+CMD ["--config", "/opt/link-up/config/link-up.yaml"]

@@ -4,12 +4,12 @@
     <modelVersion>4.0.0</modelVersion>
 
 
-    <groupId>com.baize.flux</groupId>
-    <artifactId>baize-flux</artifactId>
+    <groupId>com.link.up</groupId>
+    <artifactId>link-up</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>Baize Flux</name>
+    <name>Link-Up</name>
 
 
     <properties>
@@ -39,13 +39,13 @@
     </properties>
 
     <modules>
-        <module>baize-flux-framework</module>
-        <module>baize-flux-launcher</module>
-        <module>baize-flux-bom</module>
-        <module>baize-flux-api</module>
-        <module>baize-flux-connectors</module>
-        <module>baize-flux-dist</module>
-        <module>baize-flux-server</module>
+        <module>link-up-framework</module>
+        <module>link-up-launcher</module>
+        <module>link-up-bom</module>
+        <module>link-up-api</module>
+        <module>link-up-connectors</module>
+        <module>link-up-dist</module>
+        <module>link-up-server</module>
     </modules>
 
 
