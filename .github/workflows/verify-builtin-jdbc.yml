@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/builtin-jdbc-schema-discovery
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
