@@ -79,6 +79,20 @@ public class JdbcConnectorSchemaTest {
                         "table_path")
                         .getSemanticType());
 
+        assertEquals(
+                "DIRTY_DATA_OUTPUT",
+                option(
+                        schema,
+                        "dirty_data_output_type")
+                        .getSemanticType());
+
+        assertEquals(
+                "FILE_PATH",
+                option(
+                        schema,
+                        "dirty_data_output_path")
+                        .getSemanticType());
+
         assertTrue(
                 schema.getCapabilities()
                         .contains(
