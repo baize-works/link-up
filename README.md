@@ -63,3 +63,19 @@ auditable state transitions, worker instance identity and deterministic duplicat
 HOCON body submission remains available for CLI and compatibility use.
 
 See [the single-node offline Worker protocol](docs/worker-protocol.md) for the complete API and state ownership contract.
+
+## Connector Schema
+
+Link-Up exports Connector options, types, defaults, validation rules, semantic metadata and capabilities through a
+stable machine-readable schema:
+
+```http
+GET /api/v1/connectors
+GET /api/v1/connectors/{connectorId}/schema?role=SOURCE
+GET /api/v1/connectors/{connectorId}/schema?role=SINK
+```
+
+The schema is execution-focused and frontend-framework neutral. Yak Ops can cache it and combine it with its own
+Presentation Profile to produce a product-oriented form without duplicating Connector validation rules.
+
+See [the Connector Schema protocol](docs/connector-schema.md) for the complete contract and phase-one boundaries.
