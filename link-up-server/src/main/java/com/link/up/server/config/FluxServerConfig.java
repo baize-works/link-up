@@ -18,6 +18,8 @@ public final class FluxServerConfig {
     public static final int DEFAULT_HISTORY_LIMIT = 1_000;
     public static final int DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024;
     public static final long DEFAULT_SHUTDOWN_TIMEOUT_MILLIS = 10_000L;
+    public static final String DEFAULT_NODE_ID = "link-up-node-1";
+    public static final String DEFAULT_NODE_NAME = "Link-Up Offline Worker";
 
     private final String host;
     private final int port;
@@ -28,6 +30,8 @@ public final class FluxServerConfig {
     private final int maxRequestBytes;
     private final long shutdownTimeoutMillis;
     private final List<Path> pluginDirectories;
+    private final String nodeId;
+    private final String nodeName;
 
     public FluxServerConfig(
             String host,
@@ -40,38 +44,40 @@ public final class FluxServerConfig {
             long shutdownTimeoutMillis,
             List<Path> pluginDirectories) {
 
+        this(
+                host,
+                port,
+                jobThreads,
+                httpThreads,
+                maxQueuedJobs,
+                historyLimit,
+                maxRequestBytes,
+                shutdownTimeoutMillis,
+                pluginDirectories,
+                DEFAULT_NODE_ID,
+                DEFAULT_NODE_NAME);
+    }
+
+    public FluxServerConfig(
+            String host,
+            int port,
+            int jobThreads,
+            int httpThreads,
+            int maxQueuedJobs,
+            int historyLimit,
+            int maxRequestBytes,
+            long shutdownTimeoutMillis,
+            List<Path> pluginDirectories,
+            String nodeId,
+            String nodeName) {
+
         this.host = requireText(host, "host");
         this.port = requireRange(port, 1, 65535, "port");
-        this.jobThreads =
-                requireRange(
-                        jobThreads,
-                        1,
-                        Integer.MAX_VALUE,
-                        "jobThreads");
-        this.httpThreads =
-                requireRange(
-                        httpThreads,
-                        4,
-                        Integer.MAX_VALUE,
-                        "httpThreads");
-        this.maxQueuedJobs =
-                requireRange(
-                        maxQueuedJobs,
-                        1,
-                        Integer.MAX_VALUE,
-                        "maxQueuedJobs");
-        this.historyLimit =
-                requireRange(
-                        historyLimit,
-                        1,
-                        Integer.MAX_VALUE,
-                        "historyLimit");
-        this.maxRequestBytes =
-                requireRange(
-                        maxRequestBytes,
-                        1,
-                        Integer.MAX_VALUE,
-                        "maxRequestBytes");
+        this.jobThreads = requireRange(jobThreads, 1, Integer.MAX_VALUE, "jobThreads");
+        this.httpThreads = requireRange(httpThreads, 4, Integer.MAX_VALUE, "httpThreads");
+        this.maxQueuedJobs = requireRange(maxQueuedJobs, 1, Integer.MAX_VALUE, "maxQueuedJobs");
+        this.historyLimit = requireRange(historyLimit, 1, Integer.MAX_VALUE, "historyLimit");
+        this.maxRequestBytes = requireRange(maxRequestBytes, 1, Integer.MAX_VALUE, "maxRequestBytes");
 
         if (shutdownTimeoutMillis < 0L) {
             throw new IllegalArgumentException(
@@ -88,12 +94,12 @@ public final class FluxServerConfig {
         this.pluginDirectories =
                 Collections.unmodifiableList(
                         new ArrayList<Path>(directories));
+        this.nodeId = requireText(nodeId, "nodeId");
+        this.nodeName = requireText(nodeName, "nodeName");
     }
 
     public static FluxServerConfig defaults() {
-        int processors =
-                Runtime.getRuntime()
-                        .availableProcessors();
+        int processors = Runtime.getRuntime().availableProcessors();
 
         return new FluxServerConfig(
                 DEFAULT_HOST,
@@ -104,7 +110,9 @@ public final class FluxServerConfig {
                 DEFAULT_HISTORY_LIMIT,
                 DEFAULT_MAX_REQUEST_BYTES,
                 DEFAULT_SHUTDOWN_TIMEOUT_MILLIS,
-                Collections.<Path>emptyList());
+                Collections.<Path>emptyList(),
+                DEFAULT_NODE_ID,
+                DEFAULT_NODE_NAME);
     }
 
     public static FluxServerConfig fromArgs(String[] args) {
@@ -117,38 +125,27 @@ public final class FluxServerConfig {
         int maxQueuedJobs = defaults.getMaxQueuedJobs();
         int historyLimit = defaults.getHistoryLimit();
         int maxRequestBytes = defaults.getMaxRequestBytes();
-        long shutdownTimeout =
-                defaults.getShutdownTimeoutMillis();
+        long shutdownTimeout = defaults.getShutdownTimeoutMillis();
+        String nodeId = defaults.getNodeId();
+        String nodeName = defaults.getNodeName();
 
-        List<Path> pluginDirectories =
-                new ArrayList<Path>();
+        List<Path> pluginDirectories = new ArrayList<Path>();
 
-        for (int index = 0;
-             index < args.length;
-             index++) {
-
+        for (int index = 0; index < args.length; index++) {
             String argument = args[index];
 
-            if (argument == null
-                    || !argument.startsWith("--")) {
+            if (argument == null || !argument.startsWith("--")) {
                 throw new IllegalArgumentException(
                         "Unknown argument: " + argument);
             }
 
             String option;
             String value;
-
-            int equalIndex =
-                    argument.indexOf('=');
+            int equalIndex = argument.indexOf('=');
 
             if (equalIndex > 0) {
-                option =
-                        argument.substring(
-                                0,
-                                equalIndex);
-                value =
-                        argument.substring(
-                                equalIndex + 1);
+                option = argument.substring(0, equalIndex);
+                value = argument.substring(equalIndex + 1);
             } else {
                 option = argument;
 
@@ -175,12 +172,13 @@ public final class FluxServerConfig {
             } else if ("--max-request-bytes".equals(option)) {
                 maxRequestBytes = parseInt(option, value);
             } else if ("--shutdown-timeout-millis".equals(option)) {
-                shutdownTimeout =
-                        parseLong(option, value);
+                shutdownTimeout = parseLong(option, value);
             } else if ("--plugin-dir".equals(option)) {
-                addPluginDirectories(
-                        pluginDirectories,
-                        value);
+                addPluginDirectories(pluginDirectories, value);
+            } else if ("--node-id".equals(option)) {
+                nodeId = value;
+            } else if ("--node-name".equals(option)) {
+                nodeName = value;
             } else {
                 throw new IllegalArgumentException(
                         "Unknown option: " + option);
@@ -196,21 +194,21 @@ public final class FluxServerConfig {
                 historyLimit,
                 maxRequestBytes,
                 shutdownTimeout,
-                pluginDirectories);
+                pluginDirectories,
+                nodeId,
+                nodeName);
     }
 
     private static void addPluginDirectories(
             List<Path> directories,
             String value) {
 
-        if (value == null
-                || value.trim().isEmpty()) {
+        if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException(
                     "plugin directory must not be blank");
         }
 
-        String[] paths =
-                value.split(",");
+        String[] paths = value.split(",");
 
         for (String path : paths) {
             String normalized = path.trim();
@@ -224,40 +222,26 @@ public final class FluxServerConfig {
         }
     }
 
-    private static int parseInt(
-            String option,
-            String value) {
-
+    private static int parseInt(String option, String value) {
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException(
-                    option
-                            + " must be an integer: "
-                            + value);
+                    option + " must be an integer: " + value);
         }
     }
 
-    private static long parseLong(
-            String option,
-            String value) {
-
+    private static long parseLong(String option, String value) {
         try {
             return Long.parseLong(value);
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException(
-                    option
-                            + " must be a long integer: "
-                            + value);
+                    option + " must be a long integer: " + value);
         }
     }
 
-    private static String requireText(
-            String value,
-            String name) {
-
-        if (value == null
-                || value.trim().isEmpty()) {
+    private static String requireText(String value, String name) {
+        if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException(
                     name + " must not be blank");
         }
@@ -271,52 +255,23 @@ public final class FluxServerConfig {
             int maximum,
             String name) {
 
-        if (value < minimum
-                || value > maximum) {
+        if (value < minimum || value > maximum) {
             throw new IllegalArgumentException(
-                    name
-                            + " must be between "
-                            + minimum
-                            + " and "
-                            + maximum);
+                    name + " must be between " + minimum + " and " + maximum);
         }
 
         return value;
     }
 
-    public String getHost() {
-        return host;
-    }
-
-    public int getPort() {
-        return port;
-    }
-
-    public int getJobThreads() {
-        return jobThreads;
-    }
-
-    public int getHttpThreads() {
-        return httpThreads;
-    }
-
-    public int getMaxQueuedJobs() {
-        return maxQueuedJobs;
-    }
-
-    public int getHistoryLimit() {
-        return historyLimit;
-    }
-
-    public int getMaxRequestBytes() {
-        return maxRequestBytes;
-    }
-
-    public long getShutdownTimeoutMillis() {
-        return shutdownTimeoutMillis;
-    }
-
-    public List<Path> getPluginDirectories() {
-        return pluginDirectories;
-    }
+    public String getHost() { return host; }
+    public int getPort() { return port; }
+    public int getJobThreads() { return jobThreads; }
+    public int getHttpThreads() { return httpThreads; }
+    public int getMaxQueuedJobs() { return maxQueuedJobs; }
+    public int getHistoryLimit() { return historyLimit; }
+    public int getMaxRequestBytes() { return maxRequestBytes; }
+    public long getShutdownTimeoutMillis() { return shutdownTimeoutMillis; }
+    public List<Path> getPluginDirectories() { return pluginDirectories; }
+    public String getNodeId() { return nodeId; }
+    public String getNodeName() { return nodeName; }
 }

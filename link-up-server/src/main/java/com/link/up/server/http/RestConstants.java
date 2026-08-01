@@ -8,6 +8,9 @@ public final class RestConstants {
     public static final String HEALTH =
             API_PREFIX + "/health";
 
+    public static final String NODE =
+            API_PREFIX + "/node";
+
     public static final String JOBS =
             API_PREFIX + "/jobs";
 

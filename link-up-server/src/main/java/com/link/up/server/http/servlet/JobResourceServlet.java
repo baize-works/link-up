@@ -10,24 +10,14 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 处理以下资源：
- *
- * <pre>
- * GET    /api/v1/jobs/{jobId}
- * DELETE /api/v1/jobs/{jobId}
- * GET    /api/v1/jobs/{jobId}/pipelines
- * GET    /api/v1/jobs/{jobId}/tasks
- * GET    /api/v1/jobs/{jobId}/metrics
- * </pre>
+ * 处理单个离线作业资源和运行明细。
  */
 public final class JobResourceServlet
         extends FluxServlet {
 
     private final JobRestService service;
 
-    public JobResourceServlet(
-            JobRestService service) {
-
+    public JobResourceServlet(JobRestService service) {
         this.service = service;
     }
 
@@ -36,45 +26,43 @@ public final class JobResourceServlet
             HttpServletResponse response)
             throws IOException {
 
-        List<String> segments =
-                pathSegments(request);
+        List<String> segments = pathSegments(request);
 
         if (segments.size() == 1) {
             write(
                     response,
                     200,
-                    service.job(segments.get(0)));
+                    service.jobResponse(segments.get(0)));
+            return;
+        }
+
+        if (segments.size() == 2
+                && "external".equals(segments.get(0))) {
+
+            write(
+                    response,
+                    200,
+                    service.jobByExternalExecutionId(
+                            segments.get(1)));
             return;
         }
 
         if (segments.size() == 2) {
-            String jobId =
-                    segments.get(0);
-
-            String resource =
-                    segments.get(1);
+            String jobId = segments.get(0);
+            String resource = segments.get(1);
 
             if ("pipelines".equals(resource)) {
-                write(
-                        response,
-                        200,
-                        service.pipelines(jobId));
+                write(response, 200, service.pipelines(jobId));
                 return;
             }
 
             if ("tasks".equals(resource)) {
-                write(
-                        response,
-                        200,
-                        service.tasks(jobId));
+                write(response, 200, service.tasks(jobId));
                 return;
             }
 
             if ("metrics".equals(resource)) {
-                write(
-                        response,
-                        200,
-                        service.metrics(jobId));
+                write(response, 200, service.metrics(jobId));
                 return;
             }
         }
@@ -88,8 +76,7 @@ public final class JobResourceServlet
             HttpServletResponse response)
             throws IOException {
 
-        List<String> segments =
-                pathSegments(request);
+        List<String> segments = pathSegments(request);
 
         if (segments.size() != 1) {
             throw new JobNotFoundException(
@@ -99,6 +86,6 @@ public final class JobResourceServlet
         write(
                 response,
                 202,
-                service.cancel(segments.get(0)));
+                service.cancelResponse(segments.get(0)));
     }
 }

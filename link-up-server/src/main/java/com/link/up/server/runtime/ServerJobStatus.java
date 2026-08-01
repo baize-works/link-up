@@ -1,16 +1,22 @@
 package com.link.up.server.runtime;
 
 /**
- * REST Server 对外提供的异步作业状态。
+ * Link-Up 离线作业对外状态。
+ *
+ * <p>状态机固定为：
+ * CREATED -> SUBMITTED -> QUEUED -> RUNNING ->
+ * SUCCEEDED / FAILED / CANCELED / LOST。
  */
 public enum ServerJobStatus {
 
+    CREATED(false),
     SUBMITTED(false),
+    QUEUED(false),
     RUNNING(false),
-    CANCELLING(false),
-    CANCELED(true),
     SUCCEEDED(true),
-    FAILED(true);
+    FAILED(true),
+    CANCELED(true),
+    LOST(true);
 
     private final boolean terminal;
 
@@ -23,8 +29,6 @@ public enum ServerJobStatus {
     }
 
     public boolean canCancel() {
-        return this == SUBMITTED
-                || this == RUNNING
-                || this == CANCELLING;
+        return !terminal;
     }
 }

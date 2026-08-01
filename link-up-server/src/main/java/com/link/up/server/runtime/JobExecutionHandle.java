@@ -4,6 +4,8 @@ import com.link.up.framework.execution.JobExecution;
 import com.link.up.framework.job.JobDefinition;
 import com.link.up.framework.job.JobResult;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Future;
 
@@ -11,7 +13,7 @@ import java.util.concurrent.Future;
  * Server 内部使用的可变作业执行句柄。
  *
  * <p>所有状态转换均通过 synchronized 方法完成，
- * 避免提交、开始执行、取消和完成之间发生状态覆盖。
+ * 避免提交、入队、开始执行、取消和完成之间发生状态覆盖。
  */
 final class JobExecutionHandle {
 
@@ -22,15 +24,21 @@ final class JobExecutionHandle {
     }
 
     private final String jobId;
-    private final JobDefinition definition;
+    private final JobSubmission submission;
     private final long createTimeMillis;
+    private final List<JobStateTransition> transitions =
+            new ArrayList<JobStateTransition>();
 
+    private volatile long submittedTimeMillis;
+    private volatile long queuedTimeMillis;
     private volatile long startTimeMillis;
     private volatile long endTimeMillis;
+    private volatile long stateVersion;
 
     private volatile ServerJobStatus status =
-            ServerJobStatus.SUBMITTED;
+            ServerJobStatus.CREATED;
 
+    private volatile boolean cancellationRequested;
     private volatile JobExecution execution;
     private volatile Future<?> future;
     private volatile JobResult result;
@@ -38,20 +46,46 @@ final class JobExecutionHandle {
 
     JobExecutionHandle(
             String jobId,
-            JobDefinition definition) {
+            JobSubmission submission) {
 
         this.jobId =
                 Objects.requireNonNull(
                         jobId,
                         "jobId must not be null");
 
-        this.definition =
+        this.submission =
                 Objects.requireNonNull(
-                        definition,
-                        "definition must not be null");
+                        submission,
+                        "submission must not be null");
 
         this.createTimeMillis =
                 System.currentTimeMillis();
+
+        transitions.add(
+                new JobStateTransition(
+                        stateVersion,
+                        null,
+                        ServerJobStatus.CREATED,
+                        createTimeMillis,
+                        "job-created"));
+    }
+
+    synchronized void markSubmitted() {
+        submittedTimeMillis =
+                System.currentTimeMillis();
+
+        transition(
+                ServerJobStatus.SUBMITTED,
+                "submission-accepted");
+    }
+
+    synchronized void markQueued() {
+        queuedTimeMillis =
+                System.currentTimeMillis();
+
+        transition(
+                ServerJobStatus.QUEUED,
+                "worker-queue-accepted");
     }
 
     synchronized void bindFuture(Future<?> future) {
@@ -60,21 +94,24 @@ final class JobExecutionHandle {
                         future,
                         "future must not be null");
 
-        if (status == ServerJobStatus.CANCELLING
-                || status == ServerJobStatus.CANCELED) {
+        if (cancellationRequested) {
             future.cancel(true);
         }
     }
 
     synchronized boolean markRunning() {
-        if (status != ServerJobStatus.SUBMITTED) {
+        if (status != ServerJobStatus.QUEUED
+                || cancellationRequested) {
             return false;
         }
 
         startTimeMillis =
                 System.currentTimeMillis();
 
-        status = ServerJobStatus.RUNNING;
+        transition(
+                ServerJobStatus.RUNNING,
+                "execution-started");
+
         return true;
     }
 
@@ -86,8 +123,7 @@ final class JobExecutionHandle {
                         execution,
                         "execution must not be null");
 
-        if (status == ServerJobStatus.CANCELLING
-                || status == ServerJobStatus.CANCELED) {
+        if (cancellationRequested) {
             execution.cancel();
         }
     }
@@ -99,14 +135,14 @@ final class JobExecutionHandle {
                     status);
         }
 
-        if (status == ServerJobStatus.CANCELLING) {
+        if (cancellationRequested) {
             return CancelResult.ALREADY_REQUESTED;
         }
 
-        boolean beforeStart =
-                startTimeMillis == 0L;
+        cancellationRequested = true;
 
-        status = ServerJobStatus.CANCELLING;
+        boolean beforeStart =
+                status != ServerJobStatus.RUNNING;
 
         JobExecution currentExecution =
                 execution;
@@ -146,7 +182,12 @@ final class JobExecutionHandle {
         this.failure = failure;
         this.endTimeMillis =
                 System.currentTimeMillis();
-        this.status = finalStatus;
+
+        transition(
+                finalStatus,
+                terminalReason(
+                        finalStatus,
+                        failure));
 
         execution = null;
         future = null;
@@ -154,9 +195,66 @@ final class JobExecutionHandle {
         return true;
     }
 
+    private void transition(
+            ServerJobStatus target,
+            String reason) {
+
+        ServerJobStatus previous = status;
+
+        JobStateMachine.requireTransition(
+                previous,
+                target);
+
+        stateVersion++;
+        status = target;
+
+        transitions.add(
+                new JobStateTransition(
+                        stateVersion,
+                        previous,
+                        target,
+                        System.currentTimeMillis(),
+                        reason));
+    }
+
+    private static String terminalReason(
+            ServerJobStatus status,
+            Throwable failure) {
+
+        if (status == ServerJobStatus.SUCCEEDED) {
+            return "execution-succeeded";
+        }
+
+        if (status == ServerJobStatus.CANCELED) {
+            return "cancellation-completed";
+        }
+
+        if (status == ServerJobStatus.LOST) {
+            return "worker-lost-execution";
+        }
+
+        return failure == null
+                ? "execution-failed"
+                : "execution-failed:"
+                + failure.getClass()
+                .getSimpleName();
+    }
+
+    synchronized JobExecutionMetadata metadata() {
+        return new JobExecutionMetadata(
+                submission.getExternalExecutionId(),
+                submission.getIdempotencyKey(),
+                submission.getDefinitionVersion(),
+                submission.getConfigDigest(),
+                submittedTimeMillis,
+                queuedTimeMillis,
+                stateVersion,
+                cancellationRequested,
+                transitions);
+    }
+
     boolean isCancellationRequested() {
-        return status == ServerJobStatus.CANCELLING
-                || status == ServerJobStatus.CANCELED;
+        return cancellationRequested;
     }
 
     String getJobId() {
@@ -164,11 +262,12 @@ final class JobExecutionHandle {
     }
 
     String getJobName() {
-        return definition.getName();
+        return submission.getDefinition()
+                .getName();
     }
 
     JobDefinition getDefinition() {
-        return definition;
+        return submission.getDefinition();
     }
 
     long getCreateTimeMillis() {

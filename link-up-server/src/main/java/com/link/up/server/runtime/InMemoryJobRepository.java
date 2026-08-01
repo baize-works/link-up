@@ -20,6 +20,10 @@ public final class InMemoryJobRepository
             snapshots =
             new ConcurrentHashMap<String, JobSnapshot>();
 
+    private final ConcurrentMap<String, JobExecutionMetadata>
+            metadata =
+            new ConcurrentHashMap<String, JobExecutionMetadata>();
+
     private final ConcurrentLinkedDeque<String>
             orderedJobIds =
             new ConcurrentLinkedDeque<String>();
@@ -34,10 +38,23 @@ public final class InMemoryJobRepository
     }
 
     public void save(JobSnapshot snapshot) {
+        save(snapshot, null);
+    }
+
+    public void save(
+            JobSnapshot snapshot,
+            JobExecutionMetadata executionMetadata) {
+
         JobSnapshot previous =
                 snapshots.put(
                         snapshot.getJobId(),
                         snapshot);
+
+        if (executionMetadata != null) {
+            metadata.put(
+                    snapshot.getJobId(),
+                    executionMetadata);
+        }
 
         if (previous == null) {
             orderedJobIds.addFirst(
@@ -49,6 +66,11 @@ public final class InMemoryJobRepository
 
     public JobSnapshot get(String jobId) {
         return snapshots.get(jobId);
+    }
+
+    public JobExecutionMetadata getMetadata(
+            String jobId) {
+        return metadata.get(jobId);
     }
 
     public List<JobSnapshot> list() {
@@ -90,6 +112,7 @@ public final class InMemoryJobRepository
             }
 
             snapshots.remove(oldestJobId);
+            metadata.remove(oldestJobId);
         }
     }
 }

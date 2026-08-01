@@ -9,6 +9,7 @@ import com.link.up.server.runtime.JobRepository;
 import com.link.up.server.runtime.LocalJobExecutor;
 import com.link.up.server.runtime.LocalJobIdGenerator;
 import com.link.up.server.runtime.LocalJobManager;
+import com.link.up.server.runtime.WorkerIdentity;
 import com.link.up.server.service.JobRestService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -19,7 +20,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Link-Up REST Server 启动入口。
+ * Link-Up 单节点离线同步 Worker 启动入口。
  */
 public final class FluxServer {
 
@@ -31,8 +32,7 @@ public final class FluxServer {
     }
 
     private static final Logger LOG =
-            LogManager.getLogger(
-                    FluxServer.class);
+            LogManager.getLogger(FluxServer.class);
 
     private FluxServer() {
     }
@@ -51,14 +51,11 @@ public final class FluxServer {
                         Thread.currentThread()
                                 .getContextClassLoader(),
                         pluginDirectories.toArray(
-                                new Path[
-                                        pluginDirectories
-                                                .size()]));
+                                new Path[pluginDirectories.size()]));
 
         JobRepository repository =
                 new InMemoryJobRepository(
                         config.getHistoryLimit());
-
         JobIdGenerator jobIdGenerator =
                 new LocalJobIdGenerator();
 
@@ -71,23 +68,28 @@ public final class FluxServer {
                         repository,
                         jobIdGenerator);
 
+        WorkerIdentity workerIdentity =
+                new WorkerIdentity(
+                        config.getNodeId(),
+                        config.getNodeName(),
+                        WorkerIdentity.implementationVersion());
+
         JobRestService service =
-                new JobRestService(manager);
+                new JobRestService(
+                        manager,
+                        workerIdentity,
+                        config.getJobThreads(),
+                        config.getMaxQueuedJobs());
 
         final JettyServer server =
-                new JettyServer(
-                        config,
-                        service);
-
+                new JettyServer(config, service);
         final AtomicBoolean shutdown =
                 new AtomicBoolean(false);
 
         final Runnable shutdownAction =
                 new Runnable() {
                     public void run() {
-                        if (!shutdown.compareAndSet(
-                                false,
-                                true)) {
+                        if (!shutdown.compareAndSet(false, true)) {
                             return;
                         }
 
@@ -108,15 +110,15 @@ public final class FluxServer {
                         shutdownAction,
                         "link-up-shutdown");
 
-        Runtime.getRuntime()
-                .addShutdownHook(
-                        shutdownHook);
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
 
         try {
             server.start();
 
             LOG.info(
-                    "Link-Up Server started, host={}, port={}, jobThreads={}, pluginDirectories={}",
+                    "Link-Up Offline Worker started, nodeId={}, instanceId={}, host={}, port={}, jobThreads={}, pluginDirectories={}",
+                    workerIdentity.getNodeId(),
+                    workerIdentity.getInstanceId(),
                     config.getHost(),
                     server.getLocalPort(),
                     config.getJobThreads(),
@@ -128,37 +130,24 @@ public final class FluxServer {
 
             try {
                 Runtime.getRuntime()
-                        .removeShutdownHook(
-                                shutdownHook);
+                        .removeShutdownHook(shutdownHook);
             } catch (IllegalStateException ignored) {
                 // JVM 已经进入关闭流程。
             }
         }
     }
 
-    /**
-     * IDEA 直接启动 Server 时也提供稳定的默认日志文件。
-     *
-     * <p>显式 JVM 参数或 LOGFILE 环境变量优先级更高。
-     */
     private static void configureDefaultLogFile() {
-        if (hasText(
-                System.getProperty(
-                        LOG_FILE_PROPERTY))
-                || hasText(
-                System.getenv(
-                        "LOGFILE"))) {
+        if (hasText(System.getProperty(LOG_FILE_PROPERTY))
+                || hasText(System.getenv("LOGFILE"))) {
             return;
         }
 
         String logDirectory =
-                System.getProperty(
-                        "link.up.log.dir");
+                System.getProperty("link.up.log.dir");
 
         if (!hasText(logDirectory)) {
-            logDirectory =
-                    System.getenv(
-                            "LINK_UP_LOG_DIR");
+            logDirectory = System.getenv("LINK_UP_LOG_DIR");
         }
 
         if (!hasText(logDirectory)) {
@@ -174,7 +163,6 @@ public final class FluxServer {
     }
 
     private static boolean hasText(String value) {
-        return value != null
-                && !value.trim().isEmpty();
+        return value != null && !value.trim().isEmpty();
     }
 }

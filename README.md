@@ -48,3 +48,18 @@ bin/link-up.sh --config config/link-up.yaml
 The configuration file has a `.yaml` deployment-friendly name but uses HOCON syntax. Do not commit real JDBC
 credentials. See the [deployment and operations guide](docs/deployment.md) for packaging, CI, Docker, JVM options,
 Log4j2, security, rollback, and production guidance.
+
+## Offline Worker protocol
+
+`link-up-server` is a single-node, offline-only execution Worker. Its lifecycle is:
+
+```text
+CREATED -> SUBMITTED -> QUEUED -> RUNNING
+                                  -> SUCCEEDED / FAILED / CANCELED / LOST
+```
+
+The JSON submit protocol supports control-plane `externalExecutionId`, `idempotencyKey`, definition versioning,
+auditable state transitions, worker instance identity and deterministic duplicate submission handling. The previous
+HOCON body submission remains available for CLI and compatibility use.
+
+See [the single-node offline Worker protocol](docs/worker-protocol.md) for the complete API and state ownership contract.

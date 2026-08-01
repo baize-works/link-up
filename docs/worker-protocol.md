@@ -1,0 +1,81 @@
+# Link-Up 单节点离线 Worker 执行协议
+
+Link-Up Server 是一个只执行离线批量同步任务的单节点 Worker。Yak Ops 等控制面负责任务定义、调度、执行历史、重试和告警；Link-Up 负责接收一次执行命令、排队、运行、取消并返回最终结果。
+
+## Worker 身份
+
+```http
+GET /api/v1/node
+```
+
+响应包含稳定的 `nodeId`、每次启动变化的 `instanceId`、容量、负载和完整生命周期。控制面必须保存提交时的 `workerInstanceId`。如果同一 `nodeId` 返回了新的 `instanceId`，控制面应将旧实例中仍处于非终态的任务标记为 `LOST`。
+
+## 状态机
+
+```text
+CREATED
+   ↓
+SUBMITTED
+   ↓
+QUEUED
+   ↓
+RUNNING
+   ├── SUCCEEDED
+   ├── FAILED
+   ├── CANCELED
+   └── LOST
+```
+
+终态不可再次转换。每次状态转换都会增加 `stateVersion`，并记录在 `transitions` 中。取消请求不会引入额外的 `CANCELLING` 业务状态；`cancellationRequested=true` 表示取消意图已被接收，实际状态仍保持 `QUEUED` 或 `RUNNING`，直到进入终态。
+
+## JSON 提交协议
+
+```http
+POST /api/v1/jobs
+Content-Type: application/json
+```
+
+```json
+{
+  "externalExecutionId": "yak-execution-10086",
+  "idempotencyKey": "60af452d-813c-4e51-87d9-4b00b5e2b53f",
+  "definitionVersion": 3,
+  "hocon": "job { ... }"
+}
+```
+
+Worker 会计算配置摘要。相同 `externalExecutionId`、`idempotencyKey`、`definitionVersion` 和配置摘要的重复请求返回同一个 `jobId`；复用相同标识但提交不同内容时返回 HTTP `409` 和错误码 `FLUX-JOB-IDEMPOTENCY-CONFLICT`。
+
+旧版 `application/hocon` 和 `text/plain` 提交仍然保留，但只用于 CLI 或过渡期调用，不适合控制面可靠重试。
+
+## 查询与取消
+
+```http
+GET /api/v1/jobs/{jobId}
+GET /api/v1/jobs/external/{externalExecutionId}
+GET /api/v1/jobs?externalExecutionId={externalExecutionId}
+GET /api/v1/jobs?status=RUNNING&page=1&pageSize=20
+GET /api/v1/jobs/{jobId}/pipelines
+GET /api/v1/jobs/{jobId}/tasks
+GET /api/v1/jobs/{jobId}/metrics
+DELETE /api/v1/jobs/{jobId}
+```
+
+提交请求超时后，控制面应优先使用 `externalExecutionId` 查询，不能直接生成新执行实例重复提交。
+
+## LOST 处理
+
+`LOST` 表示最终结果未知，不等价于失败或取消：
+
+1. Worker 优雅关闭时先请求取消。
+2. 在关闭超时内完成的任务进入实际终态。
+3. 关闭超时后仍未完成的任务进入 `LOST`。
+4. 如果进程被直接杀死，控制面通过 `workerInstanceId` 变化或节点失联超时，将旧实例的非终态任务标记为 `LOST`。
+5. 对 `LOST` 的重试必须创建新的控制面执行实例和新的 `externalExecutionId`，不能修改原执行记录。
+
+## 控制面轮询建议
+
+- `SUBMITTED`、`QUEUED`：每 2～3 秒查询。
+- `RUNNING`：每 3～5 秒查询，长任务可退避到 15～30 秒。
+- 终态：停止轮询。
+- 更新前比较 `stateVersion`，只接受更高版本的状态。
