@@ -1,0 +1,32 @@
+name: Verify Built-in JDBC Discovery
+
+on:
+  push:
+    branches:
+      - agent/builtin-jdbc-schema-discovery
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run server JDBC discovery test
+        run: >-
+          mvn -B
+          -pl link-up-server
+          -am
+          -Dtest=BuiltInConnectorDiscoveryTest
+          -Dsurefire.failIfNoSpecifiedTests=false
+          test
