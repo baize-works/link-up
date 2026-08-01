@@ -28,7 +28,7 @@ RUNNING
 
 终态不可再次转换。每次状态转换都会增加 `stateVersion`，并记录在 `transitions` 中。取消请求不会引入额外的 `CANCELLING` 业务状态；`cancellationRequested=true` 表示取消意图已被接收，实际状态仍保持 `QUEUED` 或 `RUNNING`，直到进入终态。
 
-## JSON 提交协议
+## 结构化 JSON 提交协议
 
 ```http
 POST /api/v1/jobs
@@ -40,13 +40,38 @@ Content-Type: application/json
   "externalExecutionId": "yak-execution-10086",
   "idempotencyKey": "60af452d-813c-4e51-87d9-4b00b5e2b53f",
   "definitionVersion": 3,
-  "hocon": "job { ... }"
+  "jobSpec": {
+    "apiVersion": "link-up/v1",
+    "kind": "BatchSyncJob",
+    "name": "orders-sync",
+    "source": {
+      "connectorId": "jdbc",
+      "options": {
+        "url": "jdbc:mysql://source:3306/demo",
+        "table_path": "orders"
+      }
+    },
+    "sink": {
+      "connectorId": "jdbc",
+      "options": {
+        "url": "jdbc:mysql://sink:3306/demo",
+        "table_path": "orders_copy"
+      }
+    },
+    "runtime": {
+      "batchSize": 1000,
+      "sourceParallelism": 1,
+      "sinkParallelism": 1,
+      "pipelineParallelism": 1,
+      "maxBufferedBatches": 64
+    }
+  }
 }
 ```
 
-Worker 会计算配置摘要。相同 `externalExecutionId`、`idempotencyKey`、`definitionVersion` 和配置摘要的重复请求返回同一个 `jobId`；复用相同标识但提交不同内容时返回 HTTP `409` 和错误码 `FLUX-JOB-IDEMPOTENCY-CONFLICT`。
+Worker 会对规范化后的 `jobSpec` 计算配置摘要。相同 `externalExecutionId`、`idempotencyKey`、`definitionVersion` 和配置摘要的重复请求返回同一个 `jobId`；复用相同标识但提交不同内容时返回 HTTP `409` 和错误码 `FLUX-JOB-IDEMPOTENCY-CONFLICT`。
 
-旧版 `application/hocon` 和 `text/plain` 提交仍然保留，但只用于 CLI 或过渡期调用，不适合控制面可靠重试。
+JSON 请求必须且只能包含 `jobSpec` 或 `hocon` 其中一个。`hocon`、`application/hocon` 和 `text/plain` 仍保留给 CLI 与迁移场景，控制面必须使用结构化 `jobSpec`。完整字段说明见 `docs/job-spec.md`。
 
 ## 查询与取消
 
