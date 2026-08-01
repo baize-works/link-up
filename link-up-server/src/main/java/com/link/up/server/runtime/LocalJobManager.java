@@ -24,7 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 单机异步作业协调器。
+ * 单节点离线作业 Worker 协调器。
+ *
+ * <p>负责幂等提交、显式队列状态、执行取消和终态归档。
  */
 public final class LocalJobManager
         implements JobManager {
@@ -40,6 +42,18 @@ public final class LocalJobManager
             new java.util.concurrent.ConcurrentHashMap<
                     String,
                     JobExecutionHandle>();
+
+    private final Map<String, String>
+            jobIdsByIdempotencyKey =
+            new java.util.concurrent.ConcurrentHashMap<
+                    String,
+                    String>();
+
+    private final Map<String, String>
+            jobIdsByExternalExecutionId =
+            new java.util.concurrent.ConcurrentHashMap<
+                    String,
+                    String>();
 
     private final AtomicBoolean closed =
             new AtomicBoolean(false);
@@ -83,9 +97,25 @@ public final class LocalJobManager
     }
 
     public JobSnapshot submit(
-            final JobDefinition definition) {
+            JobDefinition definition) {
+
+        return submit(
+                JobSubmission.legacy(
+                        definition));
+    }
+
+    public synchronized JobSnapshot submit(
+            final JobSubmission submission) {
 
         ensureOpen();
+
+        JobSnapshot existing =
+                findExistingSubmission(
+                        submission);
+
+        if (existing != null) {
+            return existing;
+        }
 
         final String jobId =
                 jobIdGenerator.nextId();
@@ -93,18 +123,7 @@ public final class LocalJobManager
         final JobExecutionHandle handle =
                 new JobExecutionHandle(
                         jobId,
-                        definition);
-
-        FutureTask<Void> task =
-                new FutureTask<Void>(
-                        new Callable<Void>() {
-                            public Void call() {
-                                executeJob(handle);
-                                return null;
-                            }
-                        });
-
-        handle.bindFuture(task);
+                        submission);
 
         JobExecutionHandle previous =
                 runningJobs.putIfAbsent(
@@ -117,28 +136,177 @@ public final class LocalJobManager
         }
 
         try {
-            executor.execute(task);
-        } catch (RejectedExecutionException exception) {
+            registerSubmission(
+                    jobId,
+                    submission);
+        } catch (RuntimeException exception) {
             runningJobs.remove(
                     jobId,
                     handle);
+            throw exception;
+        }
 
+        handle.markSubmitted();
+
+        FutureTask<Void> task =
+                new FutureTask<Void>(
+                        new Callable<Void>() {
+                            public Void call() {
+                                executeJob(handle);
+                                return null;
+                            }
+                        });
+
+        handle.bindFuture(task);
+        handle.markQueued();
+
+        try {
+            executor.execute(task);
+        } catch (RejectedExecutionException exception) {
             task.cancel(true);
+            runningJobs.remove(
+                    jobId,
+                    handle);
+            unregisterSubmission(
+                    jobId,
+                    submission);
             throw exception;
         }
 
         return JobSnapshotFactory.create(handle);
     }
 
+    private JobSnapshot findExistingSubmission(
+            JobSubmission submission) {
+
+        String byIdempotency =
+                jobIdsByIdempotencyKey.get(
+                        submission.getIdempotencyKey());
+
+        String byExternal =
+                jobIdsByExternalExecutionId.get(
+                        submission.getExternalExecutionId());
+
+        if (byIdempotency == null
+                && byExternal == null) {
+            return null;
+        }
+
+        if (byIdempotency != null
+                && byExternal != null
+                && !byIdempotency.equals(byExternal)) {
+
+            throw new JobSubmissionConflictException(
+                    "idempotencyKey and externalExecutionId reference different jobs");
+        }
+
+        String jobId =
+                byIdempotency != null
+                        ? byIdempotency
+                        : byExternal;
+
+        JobSnapshot snapshot;
+
+        try {
+            snapshot = getJob(jobId);
+        } catch (JobNotFoundException exception) {
+            removeStaleIndexes(
+                    jobId,
+                    submission);
+            return null;
+        }
+
+        JobExecutionMetadata metadata =
+                getMetadata(jobId);
+
+        if (metadata == null
+                || !submission.getExternalExecutionId()
+                .equals(
+                        metadata.getExternalExecutionId())
+                || !submission.getIdempotencyKey()
+                .equals(
+                        metadata.getIdempotencyKey())
+                || submission.getDefinitionVersion()
+                != metadata.getDefinitionVersion()
+                || !submission.getConfigDigest()
+                .equals(
+                        metadata.getConfigDigest())) {
+
+            throw new JobSubmissionConflictException(
+                    "The idempotency key or external execution ID was reused with different content");
+        }
+
+        return snapshot;
+    }
+
+    private void registerSubmission(
+            String jobId,
+            JobSubmission submission) {
+
+        String existingByIdempotency =
+                jobIdsByIdempotencyKey.putIfAbsent(
+                        submission.getIdempotencyKey(),
+                        jobId);
+
+        if (existingByIdempotency != null) {
+            throw new JobSubmissionConflictException(
+                    "idempotencyKey already belongs to job "
+                            + existingByIdempotency);
+        }
+
+        String existingByExternal =
+                jobIdsByExternalExecutionId.putIfAbsent(
+                        submission.getExternalExecutionId(),
+                        jobId);
+
+        if (existingByExternal != null) {
+            jobIdsByIdempotencyKey.remove(
+                    submission.getIdempotencyKey(),
+                    jobId);
+
+            throw new JobSubmissionConflictException(
+                    "externalExecutionId already belongs to job "
+                            + existingByExternal);
+        }
+    }
+
+    private void unregisterSubmission(
+            String jobId,
+            JobSubmission submission) {
+
+        jobIdsByIdempotencyKey.remove(
+                submission.getIdempotencyKey(),
+                jobId);
+        jobIdsByExternalExecutionId.remove(
+                submission.getExternalExecutionId(),
+                jobId);
+    }
+
+    private void removeStaleIndexes(
+            String jobId,
+            JobSubmission submission) {
+
+        jobIdsByIdempotencyKey.remove(
+                submission.getIdempotencyKey(),
+                jobId);
+        jobIdsByExternalExecutionId.remove(
+                submission.getExternalExecutionId(),
+                jobId);
+    }
+
     private void executeJob(
             final JobExecutionHandle handle) {
 
         if (!handle.markRunning()) {
-            completeAndArchive(
-                    handle,
-                    ServerJobStatus.CANCELED,
-                    null,
-                    null);
+            if (!handle.getStatus().isTerminal()) {
+                completeAndArchive(
+                        handle,
+                        handle.isCancellationRequested()
+                                ? ServerJobStatus.CANCELED
+                                : ServerJobStatus.FAILED,
+                        null,
+                        null);
+            }
             return;
         }
 
@@ -237,7 +405,9 @@ public final class LocalJobManager
         JobSnapshot snapshot =
                 JobSnapshotFactory.create(handle);
 
-        repository.save(snapshot);
+        repository.save(
+                snapshot,
+                handle.metadata());
 
         runningJobs.remove(
                 handle.getJobId(),
@@ -263,6 +433,40 @@ public final class LocalJobManager
         }
 
         return finished;
+    }
+
+    public JobSnapshot getJobByExternalExecutionId(
+            String externalExecutionId) {
+
+        requireText(
+                externalExecutionId,
+                "externalExecutionId");
+
+        String jobId =
+                jobIdsByExternalExecutionId.get(
+                        externalExecutionId.trim());
+
+        if (jobId == null) {
+            throw new JobNotFoundException(
+                    externalExecutionId);
+        }
+
+        return getJob(jobId);
+    }
+
+    public JobExecutionMetadata getMetadata(
+            String jobId) {
+
+        requireJobId(jobId);
+
+        JobExecutionHandle running =
+                runningJobs.get(jobId);
+
+        if (running != null) {
+            return running.metadata();
+        }
+
+        return repository.getMetadata(jobId);
     }
 
     public List<JobSnapshot> listJobs() {
@@ -335,6 +539,8 @@ public final class LocalJobManager
                 == JobExecutionHandle.CancelResult
                 .CANCELLED_BEFORE_START) {
 
+            executor.purge();
+
             completeAndArchive(
                     handle,
                     ServerJobStatus.CANCELED,
@@ -343,6 +549,43 @@ public final class LocalJobManager
         }
 
         return getJob(jobId);
+    }
+
+    public int getRunningJobCount() {
+        int count = 0;
+
+        for (JobExecutionHandle handle :
+                runningJobs.values()) {
+            if (handle.getStatus()
+                    == ServerJobStatus.RUNNING) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    public int getQueuedJobCount() {
+        int count = 0;
+
+        for (JobExecutionHandle handle :
+                runningJobs.values()) {
+
+            ServerJobStatus status =
+                    handle.getStatus();
+
+            if (status == ServerJobStatus.CREATED
+                    || status == ServerJobStatus.SUBMITTED
+                    || status == ServerJobStatus.QUEUED) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    public int getActiveJobCount() {
+        return runningJobs.size();
     }
 
     public boolean isClosed() {
@@ -367,6 +610,8 @@ public final class LocalJobManager
                         == JobExecutionHandle.CancelResult
                         .CANCELLED_BEFORE_START) {
 
+                    executor.purge();
+
                     completeAndArchive(
                             handle,
                             ServerJobStatus.CANCELED,
@@ -390,15 +635,15 @@ public final class LocalJobManager
         }
 
         /*
-         * 超时仍未退出的 Job，在 Server 层标记为取消。
-         * 引擎线程已经收到中断和 CancellationToken。
+         * 关闭超时后仍未返回终态的作业，其真实结果已经无法确认，
+         * 必须标记为 LOST，而不是伪装成 CANCELED。
          */
         for (JobExecutionHandle handle :
                 runningJobs.values()) {
 
             completeAndArchive(
                     handle,
-                    ServerJobStatus.CANCELED,
+                    ServerJobStatus.LOST,
                     null,
                     null);
         }
@@ -414,10 +659,17 @@ public final class LocalJobManager
     private static void requireJobId(
             String jobId) {
 
-        if (jobId == null
-                || jobId.trim().isEmpty()) {
+        requireText(jobId, "jobId");
+    }
+
+    private static void requireText(
+            String value,
+            String name) {
+
+        if (value == null
+                || value.trim().isEmpty()) {
             throw new IllegalArgumentException(
-                    "jobId must not be blank");
+                    name + " must not be blank");
         }
     }
 

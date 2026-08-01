@@ -3,6 +3,7 @@ package com.link.up.server.http;
 import com.link.up.server.dto.ErrorResponse;
 import com.link.up.server.runtime.JobNotFoundException;
 import com.link.up.server.runtime.JobStateConflictException;
+import com.link.up.server.runtime.JobSubmissionConflictException;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -25,14 +26,12 @@ public final class ExceptionHandlingFilter
         implements Filter {
 
     public static final String REQUEST_ID_ATTRIBUTE =
-            ExceptionHandlingFilter.class
-                    .getName()
+            ExceptionHandlingFilter.class.getName()
                     + ".requestId";
 
     private static final Logger LOG =
             Logger.getLogger(
-                    ExceptionHandlingFilter.class
-                            .getName());
+                    ExceptionHandlingFilter.class.getName());
 
     public void init(FilterConfig filterConfig) {
     }
@@ -45,35 +44,24 @@ public final class ExceptionHandlingFilter
 
         HttpServletRequest request =
                 (HttpServletRequest) servletRequest;
-
         HttpServletResponse response =
                 (HttpServletResponse) servletResponse;
-
-        String requestId =
-                requestId(request);
+        String requestId = requestId(request);
 
         request.setAttribute(
                 REQUEST_ID_ATTRIBUTE,
                 requestId);
-
-        response.setHeader(
-                "X-Request-Id",
-                requestId);
+        response.setHeader("X-Request-Id", requestId);
 
         try {
-            chain.doFilter(
-                    request,
-                    response);
+            chain.doFilter(request, response);
         } catch (Exception exception) {
-            Throwable failure =
-                    unwrap(exception);
+            Throwable failure = unwrap(exception);
 
             if (response.isCommitted()) {
                 LOG.log(
                         Level.SEVERE,
-                        logMessage(
-                                request,
-                                requestId),
+                        logMessage(request, requestId),
                         failure);
 
                 throw exception instanceof ServletException
@@ -81,18 +69,14 @@ public final class ExceptionHandlingFilter
                         : new ServletException(exception);
             }
 
-            ErrorMapping mapping =
-                    map(failure);
+            ErrorMapping mapping = map(failure);
 
             response.resetBuffer();
-            response.setStatus(
-                    mapping.httpStatus);
+            response.setStatus(mapping.httpStatus);
             response.setCharacterEncoding("UTF-8");
             response.setContentType(
                     "application/json;charset=UTF-8");
-            response.setHeader(
-                    "Cache-Control",
-                    "no-store");
+            response.setHeader("Cache-Control", "no-store");
 
             JsonSupport.mapper()
                     .writeValue(
@@ -109,9 +93,7 @@ public final class ExceptionHandlingFilter
 
             LOG.log(
                     level,
-                    logMessage(
-                            request,
-                            requestId),
+                    logMessage(request, requestId),
                     failure);
         }
     }
@@ -119,9 +101,7 @@ public final class ExceptionHandlingFilter
     public void destroy() {
     }
 
-    private static ErrorMapping map(
-            Throwable failure) {
-
+    private static ErrorMapping map(Throwable failure) {
         if (failure instanceof RestException) {
             RestException exception =
                     (RestException) failure;
@@ -132,40 +112,42 @@ public final class ExceptionHandlingFilter
                     exception.getMessage());
         }
 
-        if (failure
-                instanceof JobNotFoundException) {
+        if (failure instanceof JobNotFoundException) {
             return new ErrorMapping(
                     404,
                     "FLUX-JOB-NOT-FOUND",
                     failure.getMessage());
         }
 
-        if (failure
-                instanceof JobStateConflictException) {
+        if (failure instanceof JobStateConflictException) {
             return new ErrorMapping(
                     409,
                     "FLUX-JOB-STATE-CONFLICT",
                     failure.getMessage());
         }
 
-        if (failure
-                instanceof IllegalArgumentException) {
+        if (failure instanceof JobSubmissionConflictException) {
+            return new ErrorMapping(
+                    409,
+                    "FLUX-JOB-IDEMPOTENCY-CONFLICT",
+                    failure.getMessage());
+        }
+
+        if (failure instanceof IllegalArgumentException) {
             return new ErrorMapping(
                     400,
                     "FLUX-REST-400",
                     safeMessage(failure));
         }
 
-        if (failure
-                instanceof RejectedExecutionException) {
+        if (failure instanceof RejectedExecutionException) {
             return new ErrorMapping(
                     503,
                     "FLUX-SERVER-BUSY",
                     "Job queue is full");
         }
 
-        if (failure
-                instanceof IllegalStateException) {
+        if (failure instanceof IllegalStateException) {
             return new ErrorMapping(
                     409,
                     "FLUX-REST-409",
@@ -178,15 +160,11 @@ public final class ExceptionHandlingFilter
                 "Internal server error");
     }
 
-    private static Throwable unwrap(
-            Throwable failure) {
-
+    private static Throwable unwrap(Throwable failure) {
         Throwable current = failure;
 
-        while (current
-                instanceof ServletException
+        while (current instanceof ServletException
                 && current.getCause() != null) {
-
             current = current.getCause();
         }
 
@@ -196,32 +174,22 @@ public final class ExceptionHandlingFilter
     private static String requestId(
             HttpServletRequest request) {
 
-        String provided =
-                request.getHeader(
-                        "X-Request-Id");
+        String provided = request.getHeader("X-Request-Id");
 
         if (provided != null
                 && provided.length() <= 128
-                && provided.matches(
-                "[A-Za-z0-9._-]+")) {
-
+                && provided.matches("[A-Za-z0-9._-]+")) {
             return provided;
         }
 
-        return UUID.randomUUID()
-                .toString();
+        return UUID.randomUUID().toString();
     }
 
-    private static String safeMessage(
-            Throwable failure) {
+    private static String safeMessage(Throwable failure) {
+        String message = failure.getMessage();
 
-        String message =
-                failure.getMessage();
-
-        return message == null
-                || message.trim().isEmpty()
-                ? failure.getClass()
-                .getSimpleName()
+        return message == null || message.trim().isEmpty()
+                ? failure.getClass().getSimpleName()
                 : message;
     }
 
@@ -230,16 +198,12 @@ public final class ExceptionHandlingFilter
             String requestId) {
 
         return "REST request failed"
-                + ", requestId="
-                + requestId
-                + ", method="
-                + request.getMethod()
-                + ", uri="
-                + request.getRequestURI();
+                + ", requestId=" + requestId
+                + ", method=" + request.getMethod()
+                + ", uri=" + request.getRequestURI();
     }
 
     private static final class ErrorMapping {
-
         private final int httpStatus;
         private final String code;
         private final String message;
@@ -248,7 +212,6 @@ public final class ExceptionHandlingFilter
                 int httpStatus,
                 String code,
                 String message) {
-
             this.httpStatus = httpStatus;
             this.code = code;
             this.message = message;
