@@ -55,6 +55,11 @@ public final class JdbcSinkFactory
                         JdbcSinkOptions.QUERY_TIMEOUT_SEC,
                         JdbcSinkOptions.MAX_RETRIES,
                         JdbcSinkOptions.DIRTY_DATA_POLICY,
+                        JdbcSinkOptions.DIRTY_DATA_OUTPUT_TYPE,
+                        JdbcSinkOptions.DIRTY_DATA_OUTPUT_PATH,
+                        JdbcSinkOptions.DIRTY_DATA_MAX_SAMPLES,
+                        JdbcSinkOptions.DIRTY_DATA_MAX_COUNT,
+                        JdbcSinkOptions.DIRTY_DATA_MAX_PERCENTAGE,
                         JdbcSinkOptions.CREATE_PRIMARY_KEY)
                 .build();
     }
