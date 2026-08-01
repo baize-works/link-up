@@ -1,7 +1,9 @@
 package com.link.up.connector.jdbc.source;
 
+import com.google.auto.service.AutoService;
 import com.link.up.api.configuration.ReadonlyConfig;
 import com.link.up.api.configuration.util.OptionRule;
+import com.link.up.api.connector.schema.ConnectorCapability;
 import com.link.up.api.source.SourceFactoryContext;
 import com.link.up.api.table.catalog.CatalogTable;
 import com.link.up.api.table.factory.TableSourceFactory;
@@ -12,21 +14,28 @@ import com.link.up.connector.jdbc.core.dialect.JdbcDialect;
 import com.link.up.connector.jdbc.core.dialect.JdbcDialectLoader;
 import com.link.up.connector.jdbc.options.MultiTableCommonOptions;
 import com.link.up.connector.jdbc.utils.JdbcCatalogUtils;
-import com.google.auto.service.AutoService;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * JDBC Source 工厂。
- * <p>
- * 主要负责：
- * <p>
- * 1. 解析并校验 Source 配置；
- * 2. 校验数据库方言是否可用；
- * 3. 创建 JDBC Source；
- * 4. 发现源表结构。
- * <p>
- * 表读取、分片生成和连接管理不在 Factory 中处理。
+ *
+ * <p>主要负责：
+ *
+ * <ol>
+ *   <li>解析并校验 Source 配置；</li>
+ *   <li>校验数据库方言是否可用；</li>
+ *   <li>创建 JDBC Source；</li>
+ *   <li>发现源表结构。</li>
+ * </ol>
+ *
+ * <p>表读取、分片生成和连接管理不在 Factory 中处理。
  */
 @AutoService(TableSourceFactory.class)
 public final class JdbcSourceFactory
@@ -37,6 +46,16 @@ public final class JdbcSourceFactory
     @Override
     public String factoryIdentifier() {
         return IDENTIFIER;
+    }
+
+    @Override
+    public Set<ConnectorCapability> capabilities() {
+        return Collections.unmodifiableSet(
+                EnumSet.of(
+                        ConnectorCapability.TABLE_SCHEMA_DISCOVERY,
+                        ConnectorCapability.MULTI_TABLE,
+                        ConnectorCapability.CUSTOM_SQL,
+                        ConnectorCapability.PARTITION_SPLIT));
     }
 
     @Override
@@ -68,16 +87,22 @@ public final class JdbcSourceFactory
                 loadDialect(config);
 
         Map<?, JdbcSourceTable> tables =
-                JdbcCatalogUtils.getTables(config, dialect);
+                JdbcCatalogUtils.getTables(
+                        config,
+                        dialect);
 
         List<CatalogTable> result =
-                new ArrayList<>(tables.size());
+                new ArrayList<CatalogTable>(
+                        tables.size());
 
-        for (JdbcSourceTable table : tables.values()) {
-            result.add(table.getCatalogTable());
+        for (JdbcSourceTable table :
+                tables.values()) {
+            result.add(
+                    table.getCatalogTable());
         }
 
-        return Collections.unmodifiableList(result);
+        return Collections.unmodifiableList(
+                result);
     }
 
     @Override
@@ -126,13 +151,14 @@ public final class JdbcSourceFactory
                         context.getOptions(),
                         "source options must not be null");
 
-        return JdbcSourceConfig.of(options);
+        return JdbcSourceConfig.of(
+                options);
     }
 
     /**
      * 加载当前数据库方言。
-     * <p>
-     * 这里只完成方言识别，不修改配置，也不建立数据库连接。
+     *
+     * <p>这里只完成方言识别，不修改配置，也不建立数据库连接。
      */
     private JdbcDialect loadDialect(
             JdbcSourceConfig config) {

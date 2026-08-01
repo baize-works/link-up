@@ -1,5 +1,6 @@
 package com.link.up.server;
 
+import com.link.up.framework.connector.schema.ConnectorSchemaCatalog;
 import com.link.up.server.config.FluxServerConfig;
 import com.link.up.server.http.JettyServer;
 import com.link.up.server.runtime.InMemoryJobRepository;
@@ -10,6 +11,7 @@ import com.link.up.server.runtime.LocalJobExecutor;
 import com.link.up.server.runtime.LocalJobIdGenerator;
 import com.link.up.server.runtime.LocalJobManager;
 import com.link.up.server.runtime.WorkerIdentity;
+import com.link.up.server.service.ConnectorRestService;
 import com.link.up.server.service.JobRestService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,7 +34,8 @@ public final class FluxServer {
     }
 
     private static final Logger LOG =
-            LogManager.getLogger(FluxServer.class);
+            LogManager.getLogger(
+                    FluxServer.class);
 
     private FluxServer() {
     }
@@ -41,21 +44,29 @@ public final class FluxServer {
             throws Exception {
 
         final FluxServerConfig config =
-                FluxServerConfig.fromArgs(args);
+                FluxServerConfig.fromArgs(
+                        args);
 
         List<Path> pluginDirectories =
                 config.getPluginDirectories();
 
+        ClassLoader classLoader =
+                Thread.currentThread()
+                        .getContextClassLoader();
+
+        Path[] pluginPaths =
+                pluginDirectories.toArray(
+                        new Path[pluginDirectories.size()]);
+
         JobExecutor jobExecutor =
                 new LocalJobExecutor(
-                        Thread.currentThread()
-                                .getContextClassLoader(),
-                        pluginDirectories.toArray(
-                                new Path[pluginDirectories.size()]));
+                        classLoader,
+                        pluginPaths);
 
         JobRepository repository =
                 new InMemoryJobRepository(
                         config.getHistoryLimit());
+
         JobIdGenerator jobIdGenerator =
                 new LocalJobIdGenerator();
 
@@ -72,24 +83,40 @@ public final class FluxServer {
                 new WorkerIdentity(
                         config.getNodeId(),
                         config.getNodeName(),
-                        WorkerIdentity.implementationVersion());
+                        WorkerIdentity
+                                .implementationVersion());
 
-        JobRestService service =
+        JobRestService jobService =
                 new JobRestService(
                         manager,
                         workerIdentity,
                         config.getJobThreads(),
                         config.getMaxQueuedJobs());
 
+        ConnectorSchemaCatalog connectorCatalog =
+                ConnectorSchemaCatalog.discover(
+                        classLoader,
+                        pluginPaths);
+
+        ConnectorRestService connectorService =
+                new ConnectorRestService(
+                        connectorCatalog);
+
         final JettyServer server =
-                new JettyServer(config, service);
+                new JettyServer(
+                        config,
+                        jobService,
+                        connectorService);
+
         final AtomicBoolean shutdown =
                 new AtomicBoolean(false);
 
         final Runnable shutdownAction =
                 new Runnable() {
                     public void run() {
-                        if (!shutdown.compareAndSet(false, true)) {
+                        if (!shutdown.compareAndSet(
+                                false,
+                                true)) {
                             return;
                         }
 
@@ -110,27 +137,32 @@ public final class FluxServer {
                         shutdownAction,
                         "link-up-shutdown");
 
-        Runtime.getRuntime().addShutdownHook(shutdownHook);
+        Runtime.getRuntime()
+                .addShutdownHook(
+                        shutdownHook);
 
         try {
             server.start();
 
             LOG.info(
-                    "Link-Up Offline Worker started, nodeId={}, instanceId={}, host={}, port={}, jobThreads={}, pluginDirectories={}",
+                    "Link-Up Offline Worker started, nodeId={}, instanceId={}, host={}, port={}, jobThreads={}, connectorSchemas={}, pluginDirectories={}",
                     workerIdentity.getNodeId(),
                     workerIdentity.getInstanceId(),
                     config.getHost(),
                     server.getLocalPort(),
                     config.getJobThreads(),
+                    connectorCatalog.list().size(),
                     config.getPluginDirectories());
 
             server.join();
+
         } finally {
             shutdownAction.run();
 
             try {
                 Runtime.getRuntime()
-                        .removeShutdownHook(shutdownHook);
+                        .removeShutdownHook(
+                                shutdownHook);
             } catch (IllegalStateException ignored) {
                 // JVM 已经进入关闭流程。
             }
@@ -138,16 +170,23 @@ public final class FluxServer {
     }
 
     private static void configureDefaultLogFile() {
-        if (hasText(System.getProperty(LOG_FILE_PROPERTY))
-                || hasText(System.getenv("LOGFILE"))) {
+        if (hasText(
+                System.getProperty(
+                        LOG_FILE_PROPERTY))
+                || hasText(
+                System.getenv(
+                        "LOGFILE"))) {
             return;
         }
 
         String logDirectory =
-                System.getProperty("link.up.log.dir");
+                System.getProperty(
+                        "link.up.log.dir");
 
         if (!hasText(logDirectory)) {
-            logDirectory = System.getenv("LINK_UP_LOG_DIR");
+            logDirectory =
+                    System.getenv(
+                            "LINK_UP_LOG_DIR");
         }
 
         if (!hasText(logDirectory)) {
@@ -162,7 +201,11 @@ public final class FluxServer {
                         .toString());
     }
 
-    private static boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
+    private static boolean hasText(
+            String value) {
+
+        return value != null
+                && !value.trim()
+                .isEmpty();
     }
 }
