@@ -29,6 +29,18 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            JDBC is the default built-in Connector exposed by the standalone Worker.
+            Keeping it on the Server runtime classpath allows ServiceLoader to discover
+            both SOURCE/jdbc and SINK/jdbc when FluxServer is started directly from IDEA.
+        -->
+        <dependency>
+            <groupId>com.link.up</groupId>
+            <artifactId>link-up-connector-jdbc</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-server</artifactId>
