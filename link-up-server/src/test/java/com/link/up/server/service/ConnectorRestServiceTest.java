@@ -63,6 +63,32 @@ public class ConnectorRestServiceTest {
         }
     }
 
+    @Test
+    public void shouldKeepLegacyConstructorButDisablePreflight() {
+        ConnectorRestService service =
+                new ConnectorRestService(
+                        new ConnectorSchemaCatalog(
+                                Collections.singletonList(
+                                        schema(
+                                                "jdbc",
+                                                ConnectorRole.SOURCE))));
+
+        try {
+            service.preflight(
+                    "jdbc",
+                    "SOURCE",
+                    Collections.<String, Object>emptyMap());
+            fail("Expected preflight disabled error");
+        } catch (RestException expected) {
+            assertEquals(
+                    501,
+                    expected.getHttpStatus());
+            assertEquals(
+                    "FLUX-CONNECTOR-PREFLIGHT-DISABLED",
+                    expected.getCode());
+        }
+    }
+
     private ConnectorSchema schema(
             String connectorId,
             ConnectorRole role) {
