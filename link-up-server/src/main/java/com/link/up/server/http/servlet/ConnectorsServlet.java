@@ -1,7 +1,10 @@
 package com.link.up.server.http.servlet;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.link.up.server.http.FluxServlet;
+import com.link.up.server.http.JsonSupport;
 import com.link.up.server.http.RestException;
+import com.link.up.server.service.ConnectorPreflightRequest;
 import com.link.up.server.service.ConnectorRestService;
 
 import javax.servlet.http.HttpServletRequest;
@@ -10,10 +13,13 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Connector Schema 只读接口。
+ * Connector Schema 查询与只读预检接口。
  */
 public final class ConnectorsServlet
         extends FluxServlet {
+
+    private static final int MAX_PREFLIGHT_REQUEST_BYTES =
+            1024 * 1024;
 
     private final ConnectorRestService service;
 
@@ -56,7 +62,64 @@ public final class ConnectorsServlet
             return;
         }
 
-        throw new RestException(
+        throw notFound();
+    }
+
+    @Override
+    protected void doPost(
+            HttpServletRequest request,
+            HttpServletResponse response)
+            throws IOException {
+
+        List<String> segments =
+                pathSegments(request);
+
+        if (segments.size() == 2
+                && "preflight".equalsIgnoreCase(
+                segments.get(1))) {
+
+            validateSubmitContentType(
+                    request);
+
+            ConnectorPreflightRequest body;
+
+            try {
+                String json =
+                        requestBody(
+                                request,
+                                MAX_PREFLIGHT_REQUEST_BYTES);
+
+                body =
+                        json == null
+                                || json.trim().isEmpty()
+                                ? new ConnectorPreflightRequest()
+                                : JsonSupport.mapper()
+                                .readValue(
+                                        json,
+                                        ConnectorPreflightRequest.class);
+            } catch (JsonProcessingException exception) {
+                throw new RestException(
+                        400,
+                        "FLUX-CONNECTOR-PREFLIGHT-JSON-INVALID",
+                        "Connector preflight request must be valid JSON");
+            }
+
+            write(
+                    response,
+                    200,
+                    service.preflight(
+                            segments.get(0),
+                            request.getParameter(
+                                    "role"),
+                            body.getOptions()));
+            return;
+        }
+
+        throw notFound();
+    }
+
+    private RestException notFound() {
+        return new RestException(
                 404,
                 "FLUX-REST-404",
                 "Connector resource not found");
