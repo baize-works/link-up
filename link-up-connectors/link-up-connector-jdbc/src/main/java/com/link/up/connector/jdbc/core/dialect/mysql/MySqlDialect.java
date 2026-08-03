@@ -115,8 +115,13 @@ public final class MySqlDialect
         }
 
         if (!JdbcDialect.hasText(database)) {
+            database = databaseFromUrl(
+                    connectionConfig.getUrl());
+        }
+
+        if (!JdbcDialect.hasText(database)) {
             throw new IllegalArgumentException(
-                    "MySQL 表路径缺少 database："
+                    "MySQL 表路径缺少 database，且 JDBC URL 未指定默认数据库："
                             + tablePath);
         }
 
@@ -124,6 +129,65 @@ public final class MySqlDialect
                 + "."
                 + quoteIdentifier(
                 tablePath.getTableName());
+    }
+
+    private static String databaseFromUrl(
+            String url) {
+
+        if (!JdbcDialect.hasText(url)) {
+            return null;
+        }
+
+        String normalized = url.trim();
+        int protocolSeparator =
+                normalized.indexOf("://");
+
+        if (protocolSeparator < 0) {
+            return null;
+        }
+
+        int databaseStart =
+                normalized.indexOf(
+                        '/',
+                        protocolSeparator + 3);
+
+        if (databaseStart < 0
+                || databaseStart
+                == normalized.length() - 1) {
+            return null;
+        }
+
+        int databaseEnd =
+                normalized.length();
+
+        int queryStart =
+                normalized.indexOf(
+                        '?',
+                        databaseStart + 1);
+
+        if (queryStart >= 0) {
+            databaseEnd = queryStart;
+        }
+
+        int fragmentStart =
+                normalized.indexOf(
+                        '#',
+                        databaseStart + 1);
+
+        if (fragmentStart >= 0
+                && fragmentStart < databaseEnd) {
+            databaseEnd = fragmentStart;
+        }
+
+        String database =
+                normalized.substring(
+                        databaseStart + 1,
+                        databaseEnd)
+                        .trim();
+
+        return JdbcDialect.hasText(database)
+                ? database
+                : null;
     }
 
     @Override
