@@ -34,6 +34,9 @@ public final class ControlPlaneRegistrationAgent
             LogManager.getLogger(ControlPlaneRegistrationAgent.class);
     private static final String PROTOCOL_VERSION =
             "link-up-registration/v1";
+    private static final long INITIAL_FAILURE_DELAY_MILLIS = 1_000L;
+    private static final long RESTART_CONFLICT_RETRY_MILLIS = 5_000L;
+    private static final long MAX_FAILURE_DELAY_MILLIS = 60_000L;
 
     private final ControlPlaneRegistrationConfig config;
     private final JobRestService jobService;
@@ -47,7 +50,7 @@ public final class ControlPlaneRegistrationAgent
     private volatile String registeredInstanceId;
     private volatile long sequence;
     private volatile long heartbeatMillis;
-    private volatile long failureDelayMillis = 1_000L;
+    private volatile long failureDelayMillis = INITIAL_FAILURE_DELAY_MILLIS;
 
     public ControlPlaneRegistrationAgent(
             ControlPlaneRegistrationConfig config,
@@ -91,7 +94,7 @@ public final class ControlPlaneRegistrationAgent
             } else {
                 heartbeat();
             }
-            failureDelayMillis = 1_000L;
+            failureDelayMillis = INITIAL_FAILURE_DELAY_MILLIS;
             nextDelay = heartbeatMillis;
         } catch (ControlPlaneException exception) {
             if (exception.requiresRegistration()) {
@@ -99,8 +102,17 @@ public final class ControlPlaneRegistrationAgent
                 registeredInstanceId = null;
                 // 保留已知序列；控制面复用旧租约时可以继续递增，创建新租约时高序列也合法。
             }
-            nextDelay = failureDelayMillis;
-            failureDelayMillis = Math.min(60_000L, failureDelayMillis * 2L);
+            nextDelay = retryDelayForStatus(
+                    exception.getStatusCode(),
+                    failureDelayMillis);
+            if (exception.isRegistrationConflict()) {
+                // 重启时旧租约可能尚未过期。固定短周期重试，避免指数退避把恢复再拖延一分钟。
+                failureDelayMillis = INITIAL_FAILURE_DELAY_MILLIS;
+            } else {
+                failureDelayMillis = Math.min(
+                        MAX_FAILURE_DELAY_MILLIS,
+                        failureDelayMillis * 2L);
+            }
             LOG.warn(
                     "Link-Up dynamic registration failed, status={}, retryInMs={}, message={}",
                     exception.getStatusCode(),
@@ -108,13 +120,22 @@ public final class ControlPlaneRegistrationAgent
                     exception.getMessage());
         } catch (RuntimeException exception) {
             nextDelay = failureDelayMillis;
-            failureDelayMillis = Math.min(60_000L, failureDelayMillis * 2L);
+            failureDelayMillis = Math.min(
+                    MAX_FAILURE_DELAY_MILLIS,
+                    failureDelayMillis * 2L);
             LOG.warn(
                     "Link-Up dynamic registration failed, retryInMs={}",
                     nextDelay,
                     exception);
         }
         schedule(nextDelay);
+    }
+
+    static long retryDelayForStatus(int statusCode, long currentFailureDelayMillis) {
+        if (statusCode == 409) {
+            return RESTART_CONFLICT_RETRY_MILLIS;
+        }
+        return Math.max(INITIAL_FAILURE_DELAY_MILLIS, currentFailureDelayMillis);
     }
 
     private void register() {
@@ -346,6 +367,10 @@ public final class ControlPlaneRegistrationAgent
 
         boolean requiresRegistration() {
             return statusCode == 401 || statusCode == 404 || statusCode == 409;
+        }
+
+        boolean isRegistrationConflict() {
+            return statusCode == 409;
         }
     }
 }
