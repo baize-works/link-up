@@ -12,9 +12,9 @@ import com.link.up.framework.connector.PreparedSource;
 import com.link.up.framework.execution.TaskContext;
 import com.link.up.framework.execution.TaskId;
 import com.link.up.framework.execution.split.SplitProvider;
+import com.link.up.framework.mapping.ColumnMappingPlan;
 import com.link.up.framework.planner.SourceTaskPlan;
 
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -126,7 +126,7 @@ public final class SourceTask<
                     RecordEnvelope<FluxRow> envelope =
                             createEnvelope(
                                     batch,
-                                    preparedSource.getTables());
+                                    preparedSource);
 
                     context.getMetrics()
                             .incrementBatchCount();
@@ -203,7 +203,7 @@ public final class SourceTask<
                     context.getMetrics().setCurrentPosition(batch.getDataSetId(), batch.getSplitId());
                     context.getMetrics().incrementBatchCount();
                     context.getMetrics().addSourceReadRecords(batch.getRecords().size());
-                    outputGate.write(createEnvelope(batch, preparedSource.getTables()));
+                    outputGate.write(createEnvelope(batch, preparedSource));
                 }
             } catch (Throwable failure) {
                 provider.fail(split, failure);
@@ -231,7 +231,7 @@ public final class SourceTask<
 
     private RecordEnvelope<FluxRow> createEnvelope(
             RecordBatch<FluxRow> batch,
-            Map<TablePath, CatalogTable> tables) {
+            PreparedSource<SplitT> preparedSource) {
 
         String dataSetId =
                 batch.getDataSetId();
@@ -247,17 +247,29 @@ public final class SourceTask<
                 TablePath.parse(dataSetId);
 
         CatalogTable catalogTable =
-                tables.get(tablePath);
+                preparedSource.getOutputTables().get(tablePath);
 
         if (catalogTable == null) {
             throw new IllegalStateException(
-                    "No discovered source table for batch: "
+                    "No output source table for batch: "
                             + dataSetId);
+        }
+
+        RecordBatch<FluxRow> outputBatch = batch;
+        ColumnMappingPlan mappingPlan =
+                preparedSource.getColumnMappingPlan(tablePath);
+
+        if (mappingPlan != null) {
+            outputBatch = RecordBatch.of(
+                    batch.getDataSetId(),
+                    batch.getSplitId(),
+                    mappingPlan.project(batch.getRecords()));
+            catalogTable = mappingPlan.getOutputTable();
         }
 
         return new RecordEnvelope<FluxRow>(
                 tablePath,
                 catalogTable,
-                batch);
+                outputBatch);
     }
 }

@@ -2,9 +2,13 @@ package com.link.up.framework.job;
 
 import com.link.up.api.configuration.ReadonlyConfig;
 import com.link.up.api.job.JobSpec;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** Compiles the public structured JobSpec protocol into Link-Up runtime definitions. */
 public final class JobSpecCompiler {
@@ -44,7 +48,40 @@ public final class JobSpecCompiler {
                 enumValue(runtime.getSplitAssignmentMode(), SplitAssignmentMode.STATIC_ROUND_ROBIN,
                         SplitAssignmentMode.class, "runtime.splitAssignmentMode"));
 
-        return new JobDefinition(requireText(spec.getName(), "name"), source, sink, execution);
+        return new JobDefinition(
+                requireText(spec.getName(), "name"),
+                source,
+                sink,
+                execution,
+                compileMapping(spec.getMapping()));
+    }
+
+    private ColumnMapping compileMapping(JobSpec.Mapping mapping) {
+        if (mapping == null || mapping.getColumns() == null || mapping.getColumns().isEmpty()) {
+            return ColumnMapping.empty();
+        }
+
+        List<ColumnMapping.Item> items = new ArrayList<ColumnMapping.Item>();
+        Set<String> sources = new HashSet<String>();
+        Set<String> targets = new HashSet<String>();
+
+        for (JobSpec.Column column : mapping.getColumns()) {
+            if (column == null) {
+                throw new IllegalArgumentException("mapping.columns must not contain null items");
+            }
+            ColumnMapping.Item item = new ColumnMapping.Item(column.getSource(), column.getTarget());
+            if (!sources.add(item.getSource())) {
+                throw new IllegalArgumentException(
+                        "Duplicate source column in mapping: " + item.getSource());
+            }
+            if (!targets.add(item.getTarget())) {
+                throw new IllegalArgumentException(
+                        "Duplicate target column in mapping: " + item.getTarget());
+            }
+            items.add(item);
+        }
+
+        return new ColumnMapping(items);
     }
 
     private void requireProtocol(String apiVersion, String kind) {
