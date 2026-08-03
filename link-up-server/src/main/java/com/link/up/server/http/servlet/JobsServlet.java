@@ -10,8 +10,13 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Locale;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+// 在类中定义
 
 /**
  * /api/v1/jobs 集合资源。
@@ -20,6 +25,8 @@ public final class JobsServlet
         extends FluxServlet {
     private static final Logger LOG =
             LogManager.getLogger(JobsServlet.class);
+    private static final ObjectMapper FORMATTED_MAPPER = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT);
 
     private final JobRestService service;
     private final int maxRequestBytes;
@@ -46,7 +53,10 @@ public final class JobsServlet
         LOG.info(
                 "Received job submission, contentType={}, body={}",
                 request.getContentType(),
-                body);
+                FORMATTED_MAPPER.writeValueAsString(
+                        FORMATTED_MAPPER.readValue(body, Object.class)
+                )
+        );
         Object result;
 
         if (isJson(request)) {
