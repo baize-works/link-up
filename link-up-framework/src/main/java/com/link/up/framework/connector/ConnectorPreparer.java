@@ -11,9 +11,11 @@ import com.link.up.api.table.catalog.CatalogTable;
 import com.link.up.api.table.catalog.TablePath;
 import com.link.up.api.table.factory.TableSourceFactory;
 import com.link.up.framework.classloading.ClassLoaderScope;
+import com.link.up.framework.job.ColumnMapping;
 import com.link.up.framework.job.JobDefinition;
 import com.link.up.framework.job.SinkDefinition;
 import com.link.up.framework.job.SourceDefinition;
+import com.link.up.framework.mapping.ColumnMappingPlanner;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,14 +69,34 @@ public final class ConnectorPreparer {
                         definition.getExecutionConfig()
                                 .getSourceParallelism());
 
+        source = applyColumnMapping(source, definition.getColumnMapping());
+
         Map<String, List<PreparedSink>> sinks =
-                prepareSinks(definition.getSink(), definition.getExecutionConfig().getSinkParallelism(), source.getTables());
+                prepareSinks(
+                        definition.getSink(),
+                        definition.getExecutionConfig().getSinkParallelism(),
+                        source.getOutputTables());
 
         return new PreparedJob(
                 definition.getName(),
                 source,
                 sinks,
                 definition.getExecutionConfig());
+    }
+
+    private <SplitT extends SourceSplit> PreparedSource<SplitT> applyColumnMapping(
+            PreparedSource<SplitT> source,
+            ColumnMapping mapping) {
+        ColumnMappingPlanner.Result result =
+                new ColumnMappingPlanner().plan(source.getTables(), mapping);
+
+        return new PreparedSource<SplitT>(
+                source.getFactoryIdentifier(),
+                source.getSource(),
+                source.getTables(),
+                result.getOutputTables(),
+                result.getPlans(),
+                source.getClassLoader());
     }
 
     private PreparedSource<?> prepareSource(
