@@ -1,7 +1,9 @@
 package com.link.up.api.job;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Framework-neutral structured offline batch job protocol. */
@@ -15,6 +17,7 @@ public final class JobSpec implements Serializable {
     private Connector source;
     private Connector sink;
     private Runtime runtime = new Runtime();
+    private Mapping mapping = new Mapping();
 
     public JobSpec() {}
 
@@ -30,6 +33,10 @@ public final class JobSpec implements Serializable {
     public void setSink(Connector sink) { this.sink = sink; }
     public Runtime getRuntime() { return runtime; }
     public void setRuntime(Runtime runtime) { this.runtime = runtime; }
+    public Mapping getMapping() { return mapping; }
+    public void setMapping(Mapping mapping) {
+        this.mapping = mapping == null ? new Mapping() : mapping;
+    }
 
     public static final class Connector implements Serializable {
         private String connectorId;
@@ -44,6 +51,33 @@ public final class JobSpec implements Serializable {
                     ? new LinkedHashMap<String, Object>()
                     : new LinkedHashMap<String, Object>(options);
         }
+    }
+
+    /** Fixed column selection, ordering and rename contract. */
+    public static final class Mapping implements Serializable {
+        private List<Column> columns = new ArrayList<Column>();
+
+        public Mapping() {}
+
+        public List<Column> getColumns() { return columns; }
+
+        public void setColumns(List<Column> columns) {
+            this.columns = columns == null
+                    ? new ArrayList<Column>()
+                    : new ArrayList<Column>(columns);
+        }
+    }
+
+    public static final class Column implements Serializable {
+        private String source;
+        private String target;
+
+        public Column() {}
+
+        public String getSource() { return source; }
+        public void setSource(String source) { this.source = source; }
+        public String getTarget() { return target; }
+        public void setTarget(String target) { this.target = target; }
     }
 
     public static final class Runtime implements Serializable {
