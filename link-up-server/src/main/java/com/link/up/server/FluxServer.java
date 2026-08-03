@@ -4,6 +4,8 @@ import com.link.up.framework.connector.FactoryRegistry;
 import com.link.up.framework.connector.schema.ConnectorSchemaCatalog;
 import com.link.up.server.config.FluxServerConfig;
 import com.link.up.server.http.JettyServer;
+import com.link.up.server.registration.ControlPlaneRegistrationAgent;
+import com.link.up.server.registration.ControlPlaneRegistrationConfig;
 import com.link.up.server.runtime.InMemoryJobRepository;
 import com.link.up.server.runtime.JobExecutor;
 import com.link.up.server.runtime.JobIdGenerator;
@@ -114,6 +116,15 @@ public final class FluxServer {
                         jobService,
                         connectorService);
 
+        final ControlPlaneRegistrationConfig registrationConfig =
+                ControlPlaneRegistrationConfig.load();
+
+        final ControlPlaneRegistrationAgent registrationAgent =
+                new ControlPlaneRegistrationAgent(
+                        registrationConfig,
+                        jobService,
+                        connectorCatalog);
+
         final AtomicBoolean shutdown =
                 new AtomicBoolean(false);
 
@@ -124,6 +135,15 @@ public final class FluxServer {
                                 false,
                                 true)) {
                             return;
+                        }
+
+                        // 先注销控制面租约，再停止 HTTP 服务和任务运行时。
+                        try {
+                            registrationAgent.close();
+                        } catch (RuntimeException exception) {
+                            LOG.warn(
+                                    "Failed to close control-plane registration agent",
+                                    exception);
                         }
 
                         try {
@@ -157,16 +177,18 @@ public final class FluxServer {
 
         try {
             server.start();
+            registrationAgent.start();
 
             LOG.info(
-                    "Link-Up Offline Worker started, nodeId={}, instanceId={}, host={}, port={}, jobThreads={}, connectorSchemas={}, pluginDirectories={}",
+                    "Link-Up Offline Worker started, nodeId={}, instanceId={}, host={}, port={}, jobThreads={}, connectorSchemas={}, pluginDirectories={}, dynamicRegistration={}",
                     workerIdentity.getNodeId(),
                     workerIdentity.getInstanceId(),
                     config.getHost(),
                     server.getLocalPort(),
                     config.getJobThreads(),
                     connectorCatalog.list().size(),
-                    config.getPluginDirectories());
+                    config.getPluginDirectories(),
+                    registrationConfig.isEnabled());
 
             server.join();
 
