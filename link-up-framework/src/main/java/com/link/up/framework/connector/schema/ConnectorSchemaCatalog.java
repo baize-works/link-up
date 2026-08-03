@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Worker 启动时生成的 Connector Schema 只读目录。
@@ -95,39 +96,51 @@ public final class ConnectorSchemaCatalog {
                         pluginDirectories);
 
         try {
-            ConnectorSchemaExporter exporter =
-                    new ConnectorSchemaExporter();
-
-            List<ConnectorSchema> schemas =
-                    new ArrayList<ConnectorSchema>();
-
-            for (TableSourceFactory<?> factory :
-                    registry.getSourceFactories()
-                            .values()) {
-
-                schemas.add(
-                        exporter.export(
-                                factory,
-                                ConnectorRole.SOURCE,
-                                factory.optionRule()));
-            }
-
-            for (SinkFactory factory :
-                    registry.getSinkFactories()
-                            .values()) {
-
-                schemas.add(
-                        exporter.export(
-                                factory,
-                                ConnectorRole.SINK,
-                                factory.optionRule()));
-            }
-
-            return new ConnectorSchemaCatalog(
-                    schemas);
+            return fromRegistry(
+                    registry);
         } finally {
             registry.close();
         }
+    }
+
+    /** 使用已经加载的 FactoryRegistry 构建 Schema 目录，不接管其生命周期。 */
+    public static ConnectorSchemaCatalog fromRegistry(
+            FactoryRegistry registry) {
+
+        Objects.requireNonNull(
+                registry,
+                "registry must not be null");
+
+        ConnectorSchemaExporter exporter =
+                new ConnectorSchemaExporter();
+
+        List<ConnectorSchema> schemas =
+                new ArrayList<ConnectorSchema>();
+
+        for (TableSourceFactory<?> factory :
+                registry.getSourceFactories()
+                        .values()) {
+
+            schemas.add(
+                    exporter.export(
+                            factory,
+                            ConnectorRole.SOURCE,
+                            factory.optionRule()));
+        }
+
+        for (SinkFactory factory :
+                registry.getSinkFactories()
+                        .values()) {
+
+            schemas.add(
+                    exporter.export(
+                            factory,
+                            ConnectorRole.SINK,
+                            factory.optionRule()));
+        }
+
+        return new ConnectorSchemaCatalog(
+                schemas);
     }
 
     public List<ConnectorSchema> list() {

@@ -1,5 +1,6 @@
 package com.link.up.server;
 
+import com.link.up.framework.connector.FactoryRegistry;
 import com.link.up.framework.connector.schema.ConnectorSchemaCatalog;
 import com.link.up.server.config.FluxServerConfig;
 import com.link.up.server.http.JettyServer;
@@ -93,14 +94,19 @@ public final class FluxServer {
                         config.getJobThreads(),
                         config.getMaxQueuedJobs());
 
-        ConnectorSchemaCatalog connectorCatalog =
-                ConnectorSchemaCatalog.discover(
+        final FactoryRegistry connectorRegistry =
+                FactoryRegistry.discover(
                         classLoader,
                         pluginPaths);
 
+        ConnectorSchemaCatalog connectorCatalog =
+                ConnectorSchemaCatalog.fromRegistry(
+                        connectorRegistry);
+
         ConnectorRestService connectorService =
                 new ConnectorRestService(
-                        connectorCatalog);
+                        connectorCatalog,
+                        connectorRegistry);
 
         final JettyServer server =
                 new JettyServer(
@@ -129,6 +135,14 @@ public final class FluxServer {
                         }
 
                         manager.close();
+
+                        try {
+                            connectorRegistry.close();
+                        } catch (RuntimeException exception) {
+                            LOG.warn(
+                                    "Failed to close connector registry",
+                                    exception);
+                        }
                     }
                 };
 

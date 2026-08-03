@@ -3,6 +3,7 @@ package com.link.up.connector.jdbc.sink;
 import com.google.auto.service.AutoService;
 import com.link.up.api.configuration.ReadonlyConfig;
 import com.link.up.api.configuration.util.OptionRule;
+import com.link.up.api.connector.preflight.ConnectorPreflightSupport;
 import com.link.up.api.connector.schema.ConnectorCapability;
 import com.link.up.api.factory.SinkFactory;
 import com.link.up.api.sink.PreparedSinkMetadata;
@@ -12,6 +13,7 @@ import com.link.up.api.table.type.FluxRow;
 import com.link.up.connector.jdbc.config.JdbcCommonOptions;
 import com.link.up.connector.jdbc.config.JdbcSinkConfig;
 import com.link.up.connector.jdbc.config.JdbcSinkOptions;
+import com.link.up.connector.jdbc.utils.JdbcConnectionPreflight;
 
 import java.util.Collections;
 import java.util.EnumSet;
@@ -22,7 +24,8 @@ import java.util.Set;
  */
 @AutoService(SinkFactory.class)
 public final class JdbcSinkFactory
-        implements SinkFactory {
+        implements SinkFactory,
+        ConnectorPreflightSupport {
 
     @Override
     public String factoryIdentifier() {
@@ -38,6 +41,21 @@ public final class JdbcSinkFactory
                         ConnectorCapability.UPSERT,
                         ConnectorCapability.AUTO_CREATE_TABLE,
                         ConnectorCapability.DIRTY_DATA_HANDLING));
+    }
+
+    @Override
+    public void preflight(
+            ReadonlyConfig options,
+            ClassLoader classLoader)
+            throws Exception {
+
+        // 解析 Sink 规则，但不创建 Preparer/Writer，也不执行建表或写入。
+        JdbcSinkConfig.of(
+                options);
+
+        JdbcConnectionPreflight.validate(
+                options,
+                classLoader);
     }
 
     @Override

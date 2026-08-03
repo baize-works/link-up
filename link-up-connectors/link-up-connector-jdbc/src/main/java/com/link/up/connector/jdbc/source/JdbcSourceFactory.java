@@ -3,6 +3,7 @@ package com.link.up.connector.jdbc.source;
 import com.google.auto.service.AutoService;
 import com.link.up.api.configuration.ReadonlyConfig;
 import com.link.up.api.configuration.util.OptionRule;
+import com.link.up.api.connector.preflight.ConnectorPreflightSupport;
 import com.link.up.api.connector.schema.ConnectorCapability;
 import com.link.up.api.source.SourceFactoryContext;
 import com.link.up.api.table.catalog.CatalogTable;
@@ -14,6 +15,7 @@ import com.link.up.connector.jdbc.core.dialect.JdbcDialect;
 import com.link.up.connector.jdbc.core.dialect.JdbcDialectLoader;
 import com.link.up.connector.jdbc.options.MultiTableCommonOptions;
 import com.link.up.connector.jdbc.utils.JdbcCatalogUtils;
+import com.link.up.connector.jdbc.utils.JdbcConnectionPreflight;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +41,8 @@ import java.util.Set;
  */
 @AutoService(TableSourceFactory.class)
 public final class JdbcSourceFactory
-        implements TableSourceFactory<JdbcSourceSplit> {
+        implements TableSourceFactory<JdbcSourceSplit>,
+        ConnectorPreflightSupport {
 
     private static final String IDENTIFIER = "jdbc";
 
@@ -56,6 +59,23 @@ public final class JdbcSourceFactory
                         ConnectorCapability.MULTI_TABLE,
                         ConnectorCapability.CUSTOM_SQL,
                         ConnectorCapability.PARTITION_SPLIT));
+    }
+
+    @Override
+    public void preflight(
+            ReadonlyConfig options,
+            ClassLoader classLoader)
+            throws Exception {
+
+        // 先解析 Source 规则，再执行不读表、不执行 SQL 的 JDBC 连接验证。
+        JdbcSourceConfig.of(
+                Objects.requireNonNull(
+                        options,
+                        "source options must not be null"));
+
+        JdbcConnectionPreflight.validate(
+                options,
+                classLoader);
     }
 
     @Override
