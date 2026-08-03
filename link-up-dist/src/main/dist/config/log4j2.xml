@@ -29,9 +29,9 @@
             <Routes pattern="$${ctx:jobLogFile:-__NO_JOB__}">
                 <Route key="__NO_JOB__" ref="NoJobFile"/>
                 <Route>
-                    <RollingFile name="JobFile-$${ctx:jobLogFile}"
-                                 fileName="${JOB_LOG_DIR}/$${ctx:jobLogFile}"
-                                 filePattern="${JOB_LOG_DIR}/archive/$${ctx:jobLogFile}.%d{yyyy-MM-dd}-%i.gz">
+                    <RollingFile name="JobFile-${ctx:jobLogFile}"
+                                 fileName="${JOB_LOG_DIR}/${ctx:jobLogFile}"
+                                 filePattern="${JOB_LOG_DIR}/archive/${ctx:jobLogFile}.%d{yyyy-MM-dd}-%i.gz">
                         <PatternLayout pattern="${PATTERN}"/>
                         <Policies>
                             <TimeBasedTriggeringPolicy/>
