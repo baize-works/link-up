@@ -41,15 +41,9 @@ final class JdbcSourceSplitGenerator {
 
         JdbcDialect dialect = JdbcDialectLoader.load(config.getConnectionConfig());
         Map<TablePath, JdbcSourceTable> sourceTables =
-                JdbcCatalogUtils.getTables(config, dialect);
-
-        for (JdbcSourceTable sourceTable : sourceTables.values()) {
-            if (!tables.containsKey(sourceTable.getTablePath())) {
-                throw new IllegalArgumentException(
-                        "No prepared table metadata for "
-                                + sourceTable.getTablePath());
-            }
-        }
+                reconcilePreparedTables(
+                        JdbcCatalogUtils.getTables(config, dialect),
+                        tables);
 
         Map<TablePath, JdbcSourceTable> plannedTables = new LinkedHashMap<TablePath, JdbcSourceTable>();
         JdbcSplitStatisticsProvider statisticsProvider = new JdbcSplitStatisticsProvider(config.getConnectionConfig(), dialect);
@@ -89,5 +83,79 @@ final class JdbcSourceSplitGenerator {
         }
         plannedTables.values().removeIf(java.util.Objects::isNull);
         return new JdbcSourceSplitEnumerator(config, plannedTables, parallelism).enumerateSplits();
+    }
+
+    /**
+     * Reconciles the connector's second metadata discovery with the metadata
+     * already prepared by the framework.
+     *
+     * <p>A JDBC catalog may normalize an unqualified configured path such as
+     * {@code sink_user_info} to {@code test1.sink_user_info}. The discovered
+     * {@link JdbcSourceTable} historically retained the unqualified path while
+     * its {@link CatalogTable} contained the normalized path. Using the former
+     * as the data-set identity made split planning fail with
+     * {@code No prepared table metadata} even though preparation and sink DDL
+     * had succeeded.</p>
+     */
+    static Map<TablePath, JdbcSourceTable> reconcilePreparedTables(
+            Map<TablePath, JdbcSourceTable> discoveredTables,
+            Map<TablePath, CatalogTable> preparedTables) {
+
+        Objects.requireNonNull(discoveredTables, "discoveredTables must not be null");
+        Objects.requireNonNull(preparedTables, "preparedTables must not be null");
+
+        Map<TablePath, JdbcSourceTable> result =
+                new LinkedHashMap<TablePath, JdbcSourceTable>();
+
+        for (JdbcSourceTable discoveredTable : discoveredTables.values()) {
+            if (discoveredTable == null) {
+                throw new IllegalArgumentException("discoveredTables must not contain null values");
+            }
+
+            CatalogTable discoveredCatalogTable =
+                    Objects.requireNonNull(
+                            discoveredTable.getCatalogTable(),
+                            "discovered CatalogTable must not be null");
+
+            TablePath normalizedPath =
+                    Objects.requireNonNull(
+                            discoveredCatalogTable.getTablePath(),
+                            "discovered CatalogTable path must not be null");
+
+            CatalogTable preparedCatalogTable =
+                    preparedTables.get(normalizedPath);
+
+            if (preparedCatalogTable == null) {
+                throw new IllegalArgumentException(
+                        "No prepared table metadata for "
+                                + normalizedPath
+                                + ", preparedTables="
+                                + preparedTables.keySet());
+            }
+
+            JdbcSourceTable normalizedTable =
+                    JdbcSourceTable.builder()
+                            .tablePath(normalizedPath)
+                            .query(discoveredTable.getQuery())
+                            .partitionColumn(discoveredTable.getPartitionColumn())
+                            .partitionNumber(discoveredTable.getPartitionNumber())
+                            .partitionStart(discoveredTable.getPartitionStart())
+                            .partitionEnd(discoveredTable.getPartitionEnd())
+                            .useSelectCount(discoveredTable.getUseSelectCount())
+                            .skipAnalyze(discoveredTable.getSkipAnalyze())
+                            .catalogTable(preparedCatalogTable)
+                            .build();
+
+            JdbcSourceTable previous =
+                    result.put(normalizedPath, normalizedTable);
+
+            if (previous != null) {
+                throw new IllegalArgumentException(
+                        "Duplicated normalized source table path: "
+                                + normalizedPath);
+            }
+        }
+
+        return result;
     }
 }
