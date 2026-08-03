@@ -64,16 +64,33 @@ public final class RecordBatch<T> implements Serializable {
             List<T> records) {
 
         Objects.requireNonNull(split, "split must not be null");
+        return of(split.dataSetId(), split.splitId(), records);
+    }
+
+    /**
+     * Rebuilds a batch while preserving its dataset and split identity.
+     */
+    public static <T> RecordBatch<T> of(
+            String dataSetId,
+            String splitId,
+            List<T> records) {
+
         Objects.requireNonNull(records, "records must not be null");
 
+        if (dataSetId == null || dataSetId.trim().isEmpty()) {
+            throw new IllegalArgumentException("dataSetId must not be blank");
+        }
+        if (splitId == null || splitId.trim().isEmpty()) {
+            throw new IllegalArgumentException("splitId must not be blank");
+        }
         if (records.isEmpty()) {
             throw new IllegalArgumentException(
                     "records must not be empty");
         }
 
         return new RecordBatch<>(
-                split.dataSetId(),
-                split.splitId(),
+                dataSetId.trim(),
+                splitId.trim(),
                 Collections.unmodifiableList(
                         new ArrayList<>(records)),
                 false);
