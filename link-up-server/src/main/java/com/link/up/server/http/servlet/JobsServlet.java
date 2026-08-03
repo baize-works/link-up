@@ -10,12 +10,16 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Locale;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * /api/v1/jobs 集合资源。
  */
 public final class JobsServlet
         extends FluxServlet {
+    private static final Logger LOG =
+            LogManager.getLogger(JobsServlet.class);
 
     private final JobRestService service;
     private final int maxRequestBytes;
@@ -39,7 +43,10 @@ public final class JobsServlet
                 requestBody(
                         request,
                         maxRequestBytes);
-
+        LOG.info(
+                "Received job submission, contentType={}, body={}",
+                request.getContentType(),
+                body);
         Object result;
 
         if (isJson(request)) {

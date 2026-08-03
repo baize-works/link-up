@@ -12,7 +12,7 @@ import java.util.List;
 public final class FluxServerConfig {
 
     public static final String DEFAULT_HOST = "0.0.0.0";
-    public static final int DEFAULT_PORT = 8080;
+    public static final int DEFAULT_PORT = 18080;
     public static final int DEFAULT_HTTP_THREADS = 32;
     public static final int DEFAULT_MAX_QUEUED_JOBS = 100;
     public static final int DEFAULT_HISTORY_LIMIT = 1_000;
