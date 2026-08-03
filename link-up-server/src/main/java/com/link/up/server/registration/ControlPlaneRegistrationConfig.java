@@ -31,9 +31,9 @@ public final class ControlPlaneRegistrationConfig {
             Map<String, String> labels) {
 
         this.enabled = enabled;
-        this.controlPlaneUrl = normalize(controlPlaneUrl);
-        this.secret = normalize(secret);
-        this.advertisedBaseUrl = normalize(advertisedBaseUrl);
+        this.controlPlaneUrl = normalizeUrl(controlPlaneUrl);
+        this.secret = normalizeText(secret);
+        this.advertisedBaseUrl = normalizeUrl(advertisedBaseUrl);
         this.heartbeatMillis = Math.max(5_000L, heartbeatMillis);
         this.connectTimeoutMillis = Math.max(1_000, connectTimeoutMillis);
         this.requestTimeoutMillis = Math.max(1_000, requestTimeoutMillis);
@@ -153,15 +153,20 @@ public final class ControlPlaneRegistrationConfig {
         }
     }
 
-    private static String normalize(String value) {
+    private static String normalizeText(String value) {
         if (value == null) {
             return null;
         }
         String normalized = value.trim();
-        if (normalized.endsWith("/")) {
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static String normalizeUrl(String value) {
+        String normalized = normalizeText(value);
+        while (normalized != null && normalized.endsWith("/")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
-        return normalized.isEmpty() ? null : normalized;
+        return normalized;
     }
 
     public boolean isEnabled() { return enabled; }
