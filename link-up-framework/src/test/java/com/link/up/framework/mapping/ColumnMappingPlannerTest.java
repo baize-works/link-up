@@ -1,5 +1,6 @@
 package com.link.up.framework.mapping;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.link.up.api.job.JobSpec;
 import com.link.up.api.table.catalog.CatalogTable;
 import com.link.up.api.table.catalog.Column;
@@ -8,7 +9,6 @@ import com.link.up.api.table.catalog.TablePath;
 import com.link.up.api.table.catalog.TableSchema;
 import com.link.up.api.table.type.BasicType;
 import com.link.up.api.table.type.FluxRow;
-import com.link.up.framework.job.ColumnMapping;
 import com.link.up.framework.job.JobDefinition;
 import com.link.up.framework.job.JobSpecCompiler;
 import org.junit.Test;
@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class ColumnMappingPlannerTest {
 
@@ -56,6 +57,13 @@ public class ColumnMappingPlannerTest {
                 .get(0);
         assertEquals("Alice", projected.getField(0));
         assertEquals(7L, projected.getField(1));
+    }
+
+    @Test
+    public void omitsAbsentMappingFromProtocolJson() throws Exception {
+        String json = new ObjectMapper().writeValueAsString(baseSpec());
+
+        assertFalse(json.contains("\"mapping\""));
     }
 
     @Test(expected = IllegalArgumentException.class)
