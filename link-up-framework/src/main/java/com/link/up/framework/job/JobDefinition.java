@@ -15,11 +15,22 @@ public final class JobDefinition {
 
     private final ExecutionConfig executionConfig;
 
+    private final ColumnMapping columnMapping;
+
     public JobDefinition(
             String name,
             SourceDefinition source,
             SinkDefinition sink,
             ExecutionConfig executionConfig) {
+        this(name, source, sink, executionConfig, ColumnMapping.empty());
+    }
+
+    public JobDefinition(
+            String name,
+            SourceDefinition source,
+            SinkDefinition sink,
+            ExecutionConfig executionConfig,
+            ColumnMapping columnMapping) {
 
         this.name = requireName(name);
 
@@ -37,6 +48,11 @@ public final class JobDefinition {
                 Objects.requireNonNull(
                         executionConfig,
                         "executionConfig must not be null");
+
+        this.columnMapping =
+                columnMapping == null
+                        ? ColumnMapping.empty()
+                        : columnMapping;
     }
 
     private static String requireName(String name) {
@@ -68,5 +84,9 @@ public final class JobDefinition {
 
     public ExecutionConfig getExecutionConfig() {
         return executionConfig;
+    }
+
+    public ColumnMapping getColumnMapping() {
+        return columnMapping;
     }
 }
