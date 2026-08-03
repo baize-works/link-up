@@ -1,5 +1,6 @@
 package com.link.up.api.job;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,7 +18,7 @@ public final class JobSpec implements Serializable {
     private Connector source;
     private Connector sink;
     private Runtime runtime = new Runtime();
-    private Mapping mapping = new Mapping();
+    private Mapping mapping;
 
     public JobSpec() {}
 
@@ -33,10 +34,10 @@ public final class JobSpec implements Serializable {
     public void setSink(Connector sink) { this.sink = sink; }
     public Runtime getRuntime() { return runtime; }
     public void setRuntime(Runtime runtime) { this.runtime = runtime; }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public Mapping getMapping() { return mapping; }
-    public void setMapping(Mapping mapping) {
-        this.mapping = mapping == null ? new Mapping() : mapping;
-    }
+    public void setMapping(Mapping mapping) { this.mapping = mapping; }
 
     public static final class Connector implements Serializable {
         private String connectorId;
