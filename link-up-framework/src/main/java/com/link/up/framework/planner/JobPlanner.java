@@ -52,8 +52,8 @@ public final class JobPlanner {
         for (Map.Entry<String, List<SplitT>> entry : byDataSet.entrySet()) {
             String dataSetId = entry.getKey();
             TablePath path = TablePath.parse(dataSetId);
-            CatalogTable table = preparedSource.getTables().get(path);
-            if (table == null) throw new IllegalStateException("No catalog table for data set: " + dataSetId);
+            CatalogTable table = preparedSource.getOutputTables().get(path);
+            if (table == null) throw new IllegalStateException("No output catalog table for data set: " + dataSetId);
             List<List<SplitT>> assignments = splitAssigner.assign(entry.getValue(), config.getSourceParallelism());
             SplitProvider<SplitT> provider = config.getSplitAssignmentMode() == SplitAssignmentMode.DYNAMIC ? new LocalSplitQueue<SplitT>(entry.getValue()) : null;
             String pipelineId = "pipeline-" + dataSetId;
