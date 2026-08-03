@@ -26,15 +26,12 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Link-Up Worker 主动注册 Yak Ops、续租并在优雅关闭时注销。
- */
+/** Link-Up Worker 主动注册 Yak Ops、续租并在优雅关闭时注销。 */
 public final class ControlPlaneRegistrationAgent
         implements AutoCloseable {
 
     private static final Logger LOG =
             LogManager.getLogger(ControlPlaneRegistrationAgent.class);
-
     private static final String PROTOCOL_VERSION =
             "link-up-registration/v1";
 
@@ -100,7 +97,7 @@ public final class ControlPlaneRegistrationAgent
             if (exception.requiresRegistration()) {
                 leaseId = null;
                 registeredInstanceId = null;
-                sequence = 0L;
+                // 保留已知序列；控制面复用旧租约时可以继续递增，创建新租约时高序列也合法。
             }
             nextDelay = failureDelayMillis;
             failureDelayMillis = Math.min(60_000L, failureDelayMillis * 2L);
@@ -143,7 +140,6 @@ public final class ControlPlaneRegistrationAgent
         if (!node.getInstanceId().equals(registeredInstanceId)) {
             leaseId = null;
             registeredInstanceId = null;
-            sequence = 0L;
             register();
             return;
         }
@@ -200,6 +196,7 @@ public final class ControlPlaneRegistrationAgent
         }
         leaseId = receivedLease;
         registeredInstanceId = instanceId;
+        sequence = Math.max(sequence, data.path("heartbeatSequence").asLong(0L));
         long suggested = data.path("heartbeatIntervalMillis")
                 .asLong(config.getHeartbeatMillis());
         heartbeatMillis = Math.max(5_000L, Math.min(60_000L, suggested));
@@ -220,12 +217,7 @@ public final class ControlPlaneRegistrationAgent
             long timestamp = System.currentTimeMillis();
             String nonce = UUID.randomUUID().toString().replace("-", "");
             String signature = RegistrationRequestSigner.sign(
-                    "POST",
-                    url.getPath(),
-                    timestamp,
-                    nonce,
-                    body,
-                    config.getSecret());
+                    "POST", url.getPath(), timestamp, nonce, body, config.getSecret());
             connection.setRequestProperty(
                     "X-Yak-Registration-Timestamp",
                     String.valueOf(timestamp));
@@ -314,11 +306,11 @@ public final class ControlPlaneRegistrationAgent
 
     @Override
     public void close() {
-        if (!started.get() || closed.get()) {
+        if (closed.getAndSet(true)) {
             return;
         }
         try {
-            if (leaseId != null && registeredInstanceId != null) {
+            if (started.get() && leaseId != null && registeredInstanceId != null) {
                 ObjectNode payload = mapper.createObjectNode();
                 WorkerNodeResponse node = jobService.node();
                 payload.put("protocolVersion", PROTOCOL_VERSION);
@@ -333,7 +325,6 @@ public final class ControlPlaneRegistrationAgent
         } catch (RuntimeException exception) {
             LOG.warn("Could not deregister Link-Up Worker during shutdown", exception);
         } finally {
-            closed.set(true);
             scheduler.shutdownNow();
         }
     }
@@ -351,9 +342,7 @@ public final class ControlPlaneRegistrationAgent
             this.statusCode = statusCode;
         }
 
-        int getStatusCode() {
-            return statusCode;
-        }
+        int getStatusCode() { return statusCode; }
 
         boolean requiresRegistration() {
             return statusCode == 401 || statusCode == 404 || statusCode == 409;
