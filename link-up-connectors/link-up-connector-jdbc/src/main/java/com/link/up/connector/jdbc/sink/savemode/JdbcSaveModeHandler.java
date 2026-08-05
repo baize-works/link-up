@@ -11,6 +11,8 @@ import com.link.up.connector.jdbc.sink.SchemaSaveMode;
  */
 public final class JdbcSaveModeHandler extends DefaultSaveModeHandler {
     private final boolean createPrimaryKey;
+    private final CatalogTable createTableDefinition;
+    private boolean tableCreated;
 
     public JdbcSaveModeHandler(
             SchemaSaveMode schemaSaveMode,
@@ -20,21 +22,31 @@ public final class JdbcSaveModeHandler extends DefaultSaveModeHandler {
             boolean createPrimaryKey) {
         super(schemaSaveMode, dataSaveMode, catalog, table);
         this.createPrimaryKey = createPrimaryKey;
+        this.createTableDefinition = createTableDefinition(table);
     }
 
     @Override
     protected void createTable() {
-        catalog.createTable(createTableDefinition(), false);
+        catalog.createTable(createTableDefinition, false);
+        tableCreated = true;
     }
 
-    private CatalogTable createTableDefinition() {
+    public CatalogTable getCreateTableDefinition() {
+        return createTableDefinition;
+    }
+
+    public boolean isTableCreated() {
+        return tableCreated;
+    }
+
+    private CatalogTable createTableDefinition(CatalogTable sourceTable) {
         if (createPrimaryKey) {
-            return table;
+            return sourceTable;
         }
         TableSchema schema =
                 TableSchema.builder()
-                        .columns(table.getTableSchema().getColumns())
+                        .columns(sourceTable.getTableSchema().getColumns())
                         .build();
-        return table.withSchema(schema);
+        return sourceTable.withSchema(schema);
     }
 }
