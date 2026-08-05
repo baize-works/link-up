@@ -1,11 +1,15 @@
 package com.link.up.server.runtime;
 
+import com.link.up.api.sink.TableDdl;
 import com.link.up.framework.execution.JobExecution;
 import com.link.up.framework.job.JobDefinition;
 import com.link.up.framework.job.JobResult;
+import com.link.up.framework.job.PipelineResult;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Future;
 
@@ -241,6 +245,21 @@ final class JobExecutionHandle {
     }
 
     synchronized JobExecutionMetadata metadata() {
+        Map<String, TableDdl> tableDdls =
+                new LinkedHashMap<String, TableDdl>();
+
+        JobResult currentResult = result;
+        if (currentResult != null) {
+            for (PipelineResult pipelineResult :
+                    currentResult.getPipelineResults()) {
+                if (pipelineResult.getTableDdl() != null) {
+                    tableDdls.put(
+                            pipelineResult.getPipelineId(),
+                            pipelineResult.getTableDdl());
+                }
+            }
+        }
+
         return new JobExecutionMetadata(
                 submission.getExternalExecutionId(),
                 submission.getIdempotencyKey(),
@@ -250,7 +269,8 @@ final class JobExecutionHandle {
                 queuedTimeMillis,
                 stateVersion,
                 cancellationRequested,
-                transitions);
+                transitions,
+                tableDdls);
     }
 
     boolean isCancellationRequested() {
