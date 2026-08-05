@@ -1,11 +1,13 @@
 package com.link.up.framework.job;
 
+import com.link.up.api.sink.TableDdl;
+
 import java.util.Objects;
 
 /**
  * 单条 Pipeline 的最终执行结果。
  *
- * <p>除执行状态外，还保留 Source、Sink 和目标表等展示信息，
+ * <p>除执行状态外，还保留 Source、Sink、目标表和离线建表语句等展示信息，
  * 供 Launcher、REST API 或 Web 控制台输出执行详情。
  */
 public final class PipelineResult {
@@ -20,6 +22,7 @@ public final class PipelineResult {
     private final String sinkIdentifier;
     private final String sinkTable;
     private final int sinkTaskCount;
+    private final TableDdl tableDdl;
 
     private final PipelineStatus status;
     private final CommitSummary commitSummary;
@@ -44,6 +47,7 @@ public final class PipelineResult {
                 "-",
                 "-",
                 0,
+                null,
                 status,
                 commitSummary,
                 failure);
@@ -58,6 +62,35 @@ public final class PipelineResult {
             String sinkIdentifier,
             String sinkTable,
             int sinkTaskCount,
+            PipelineStatus status,
+            CommitSummary commitSummary,
+            Throwable failure) {
+
+        this(
+                pipelineId,
+                dataSetId,
+                sourceIdentifier,
+                sourceTable,
+                sourceTaskCount,
+                sinkIdentifier,
+                sinkTable,
+                sinkTaskCount,
+                null,
+                status,
+                commitSummary,
+                failure);
+    }
+
+    public PipelineResult(
+            String pipelineId,
+            String dataSetId,
+            String sourceIdentifier,
+            String sourceTable,
+            int sourceTaskCount,
+            String sinkIdentifier,
+            String sinkTable,
+            int sinkTaskCount,
+            TableDdl tableDdl,
             PipelineStatus status,
             CommitSummary commitSummary,
             Throwable failure) {
@@ -89,6 +122,8 @@ public final class PipelineResult {
 
         this.sinkTaskCount =
                 Math.max(0, sinkTaskCount);
+
+        this.tableDdl = tableDdl;
 
         this.status =
                 Objects.requireNonNull(
@@ -159,6 +194,10 @@ public final class PipelineResult {
 
     public int getSinkTaskCount() {
         return sinkTaskCount;
+    }
+
+    public TableDdl getTableDdl() {
+        return tableDdl;
     }
 
     public PipelineStatus getStatus() {
