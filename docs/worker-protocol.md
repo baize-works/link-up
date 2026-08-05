@@ -88,6 +88,40 @@ DELETE /api/v1/jobs/{jobId}
 
 提交请求超时后，控制面应优先使用 `externalExecutionId` 查询，不能直接生成新执行实例重复提交。
 
+## 离线建表结果
+
+JDBC Sink 在准备每个数据集时会生成最终目标表的 `CREATE TABLE` 语句。单表任务包含一个 Pipeline，多表任务按数据集包含多个 Pipeline；两种模式使用相同结构：
+
+```json
+{
+  "pipelineId": "pipeline-orders",
+  "dataSetId": "source_db.orders",
+  "source": {
+    "table": "source_db.orders"
+  },
+  "sink": {
+    "table": "target_db.orders"
+  },
+  "tableDdl": {
+    "dialect": "MYSQL",
+    "sourceTable": "source_db.orders",
+    "targetTable": "target_db.orders",
+    "createTableSql": "CREATE TABLE `target_db`.`orders` (...);",
+    "executed": true,
+    "status": "SUCCEEDED",
+    "reason": "TARGET_TABLE_CREATED",
+    "durationMillis": 18
+  }
+}
+```
+
+`tableDdl` 只描述离线任务准备阶段生成的建表语句，不表示 CDC 或实时 Schema Change：
+
+- `executed=true` 表示本次确实执行了建表；
+- 目标表已经存在时，`executed=false`、`status=SKIPPED`、`reason=TARGET_TABLE_ALREADY_EXISTS`；
+- 即使本次未执行，仍返回按最终目标表结构生成的 `createTableSql`，供控制面查看和审计；
+- DDL 按 Pipeline 返回，因此多表任务不会把不同目标表的建表语句混在一起。
+
 ## LOST 处理
 
 `LOST` 表示最终结果未知，不等价于失败或取消：
