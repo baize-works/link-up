@@ -73,6 +73,9 @@ final class JdbcSinkPreparer implements SinkPreparer {
                 }
 
                 CatalogTable createDefinition = handler.getCreateTableDefinition();
+                TablePath ddlTargetPath = JdbcCreateTableSqlResolver.resolveTargetPath(
+                        config.getConnectionConfig(),
+                        createDefinition.getTablePath());
                 boolean executed = handler.isTableCreated();
                 String reason = executed
                         ? TableDdl.REASON_TARGET_TABLE_CREATED
@@ -83,8 +86,13 @@ final class JdbcSinkPreparer implements SinkPreparer {
                 TableDdl tableDdl = new TableDdl(
                         dialect.name(),
                         entry.getKey().toString(),
-                        target.getTablePath().toString(),
-                        JdbcCreateTableSqlResolver.resolve(dialect, createDefinition),
+                        ddlTargetPath == null
+                                ? target.getTablePath().toString()
+                                : ddlTargetPath.toString(),
+                        JdbcCreateTableSqlResolver.resolve(
+                                dialect,
+                                config.getConnectionConfig(),
+                                createDefinition),
                         executed,
                         executed ? TableDdl.STATUS_SUCCEEDED : TableDdl.STATUS_SKIPPED,
                         reason,
