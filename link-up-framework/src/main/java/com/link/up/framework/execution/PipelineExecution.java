@@ -1,5 +1,6 @@
 package com.link.up.framework.execution;
 
+import com.link.up.api.sink.TableDdl;
 import com.link.up.api.source.SourceSplit;
 import com.link.up.api.table.catalog.CatalogTable;
 import com.link.up.api.table.type.FluxRow;
@@ -98,7 +99,7 @@ final class PipelineExecution {
     }
 
     /**
-     * 创建包含 Source、Sink 和目标表信息的 Pipeline 结果。
+     * 创建包含 Source、Sink、目标表和建表 DDL 信息的 Pipeline 结果。
      */
     private PipelineResult createPipelineResult(
             PipelineStatus status,
@@ -130,6 +131,12 @@ final class PipelineExecution {
                         .getTargetTable(
                                 plan.getDataSetPath());
 
+        TableDdl tableDdl =
+                preparedSink
+                        .getMetadata()
+                        .getTableDdl(
+                                plan.getDataSetPath());
+
         String sinkTablePath = "-";
 
         if (targetTable != null
@@ -150,6 +157,7 @@ final class PipelineExecution {
                 sinkIdentifier,
                 sinkTablePath,
                 plan.getSinkTaskPlans().size(),
+                tableDdl,
                 status,
                 commitSummary,
                 failure);
