@@ -71,7 +71,8 @@ public final class JobsServlet
         } else {
             LOG.info(
                     "Received legacy job submission, contentType={}, bodyBytes={}",
-                    request.getContentType(),
+                    safeLogValue(
+                            request.getContentType()),
                     utf8Length(body));
 
             result = service.submitLegacyResponse(body);
@@ -123,25 +124,30 @@ public final class JobsServlet
 
         LOG.info(
                 "Received job submission, contentType={}, bodyBytes={}, externalExecutionId={}, definitionVersion={}, jobName={}, sourceConnector={}, sinkConnector={}",
-                request.getContentType(),
+                safeLogValue(
+                        request.getContentType()),
                 utf8Length(body),
-                submitRequest == null
-                        ? null
-                        : submitRequest.getExternalExecutionId(),
+                safeLogValue(
+                        submitRequest == null
+                                ? null
+                                : submitRequest.getExternalExecutionId()),
                 submitRequest == null
                         ? null
                         : submitRequest.getDefinitionVersion(),
-                jobSpec == null
-                        ? null
-                        : jobSpec.getName(),
-                connectorId(
+                safeLogValue(
                         jobSpec == null
                                 ? null
-                                : jobSpec.getSource()),
-                connectorId(
-                        jobSpec == null
-                                ? null
-                                : jobSpec.getSink()));
+                                : jobSpec.getName()),
+                safeLogValue(
+                        connectorId(
+                                jobSpec == null
+                                        ? null
+                                        : jobSpec.getSource())),
+                safeLogValue(
+                        connectorId(
+                                jobSpec == null
+                                        ? null
+                                        : jobSpec.getSink())));
     }
 
     private String connectorId(
@@ -150,6 +156,16 @@ public final class JobsServlet
         return connector == null
                 ? null
                 : connector.getConnectorId();
+    }
+
+    private String safeLogValue(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        return value.replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace('\t', ' ');
     }
 
     private int utf8Length(String value) {
