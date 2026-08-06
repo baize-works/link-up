@@ -47,6 +47,8 @@ final class JobExecutionHandle {
     private volatile Future<?> future;
     private volatile JobResult result;
     private volatile Throwable failure;
+    private volatile String runId;
+    private volatile String jobLogFile;
 
     JobExecutionHandle(
             String jobId,
@@ -126,6 +128,10 @@ final class JobExecutionHandle {
                 Objects.requireNonNull(
                         execution,
                         "execution must not be null");
+
+        this.runId = execution.getRunId();
+        this.jobLogFile =
+                execution.getJobLogFile();
 
         if (cancellationRequested) {
             execution.cancel();
@@ -270,7 +276,9 @@ final class JobExecutionHandle {
                 stateVersion,
                 cancellationRequested,
                 transitions,
-                tableDdls);
+                tableDdls,
+                runId,
+                jobLogFile);
     }
 
     boolean isCancellationRequested() {
