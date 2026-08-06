@@ -134,18 +134,18 @@ public final class LocalFluxEngine
                 definition,
                 "definition must not be null");
 
-        long startTimeMillis =
+        long logIdentityTimeMillis =
                 System.currentTimeMillis();
 
         String runId =
                 JobLogFileName.createJobId(
                         definition.getName(),
-                        startTimeMillis);
+                        logIdentityTimeMillis);
 
         String jobLogFile =
                 JobLogFileName.create(
                         definition.getName(),
-                        startTimeMillis);
+                        logIdentityTimeMillis);
 
         try (CloseableThreadContext.Instance ignored =
                      CloseableThreadContext
@@ -196,7 +196,7 @@ public final class LocalFluxEngine
                     new JobExecution(
                             executionPlan,
                             classLoader,
-                            startTimeMillis,
+                            System.currentTimeMillis(),
                             runId,
                             jobLogFile);
 
