@@ -33,11 +33,11 @@ public class JobLogReaderTest {
         try {
             String fileName = "job-orders-1.log";
             String content =
-                    "2026-08-06 08:53:13.855 INFO  [link-up-job-1] [run=orders-1] c.l.u.f.e.JobExecution - Job started\n"
-                            + "2026-08-06 08:53:13.900 INFO  [link-up-job-1] [run=orders-1] c.l.u.c.j.c.AbstractJdbcCatalog - 执行 Catalog SQL：CREATE TABLE `demo`.`orders` (\n"
+                    "2026-08-06 08:53:13.855 INFO  [link-up-job-1] [orders-1] c.l.u.f.e.JobExecution - Job started\n"
+                            + "2026-08-06 08:53:13.900 INFO  [link-up-job-1] [orders-1] c.l.u.c.j.c.AbstractJdbcCatalog - 执行 Catalog SQL：CREATE TABLE `demo`.`orders` (\n"
                             + "    `id` BIGINT NOT NULL\n"
                             + ");\n"
-                            + "2026-08-06 08:53:19.021 INFO  [link-up-job-1] [run=orders-1] c.l.u.f.e.JobExecution - Job finished: status=SUCCEEDED\n";
+                            + "2026-08-06 08:53:19.021 INFO  [link-up-job-1] [orders-1] c.l.u.f.e.JobExecution - Job finished: status=SUCCEEDED\n";
 
             Files.write(
                     directory.resolve(fileName),
