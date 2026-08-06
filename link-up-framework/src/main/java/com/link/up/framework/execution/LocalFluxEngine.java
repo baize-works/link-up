@@ -144,8 +144,15 @@ public final class LocalFluxEngine
         try (CloseableThreadContext.Instance ignored =
                      CloseableThreadContext
                              .put("runId", runId)
+                             .put("jobId", runId)
                              .put("jobName", definition.getName())
                              .put("jobLogFile", jobLogFile)) {
+
+            if (listener != null) {
+                listener.onJobLogCreated(
+                        runId,
+                        jobLogFile);
+            }
 
             PreparedJob preparedJob =
                     connectorPreparer.prepare(definition);
