@@ -121,6 +121,21 @@ final class JobExecutionHandle {
         return true;
     }
 
+    synchronized void bindLogIdentity(
+            String runId,
+            String jobLogFile) {
+
+        this.runId =
+                requireText(
+                        runId,
+                        "runId");
+
+        this.jobLogFile =
+                requireText(
+                        jobLogFile,
+                        "jobLogFile");
+    }
+
     synchronized void bindExecution(
             JobExecution execution) {
 
@@ -129,9 +144,9 @@ final class JobExecutionHandle {
                         execution,
                         "execution must not be null");
 
-        this.runId = execution.getRunId();
-        this.jobLogFile =
-                execution.getJobLogFile();
+        bindLogIdentity(
+                execution.getRunId(),
+                execution.getJobLogFile());
 
         if (cancellationRequested) {
             execution.cancel();
@@ -324,5 +339,19 @@ final class JobExecutionHandle {
 
     Throwable getFailure() {
         return failure;
+    }
+
+    private static String requireText(
+            String value,
+            String name) {
+
+        if (value == null
+                || value.trim().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    name + " must not be blank");
+        }
+
+        return value.trim();
     }
 }
