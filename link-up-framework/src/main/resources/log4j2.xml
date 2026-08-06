@@ -4,7 +4,7 @@
         <Property name="LOG_DIR">${sys:link.up.log.dir:-${env:LINK_UP_LOG_DIR:-logs}}</Property>
         <Property name="LOG_FILE">${sys:link.up.log.file:-${env:LOGFILE:-${LOG_DIR}/link-up.log}}</Property>
         <Property name="JOB_LOG_DIR">${sys:link.up.job.log.dir:-${env:LINK_UP_JOB_LOG_DIR:-${LOG_DIR}/jobs}}</Property>
-        <Property name="PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] [%X{jobId}] %c{1.} - %msg%n%throwable</Property>
+        <Property name="PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] [run=%X{runId}] %c{1.} - %msg%n%throwable</Property>
     </Properties>
 
     <Appenders>
