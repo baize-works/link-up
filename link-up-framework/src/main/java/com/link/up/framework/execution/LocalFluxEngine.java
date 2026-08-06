@@ -8,6 +8,8 @@ import com.link.up.framework.job.JobResult;
 import com.link.up.framework.planner.ExecutionPlan;
 import com.link.up.framework.planner.JobPlanner;
 import org.apache.logging.log4j.CloseableThreadContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
 import java.util.Objects;
@@ -17,6 +19,10 @@ import java.util.Objects;
  */
 public final class LocalFluxEngine
         implements FluxEngine {
+
+    private static final Logger LOG =
+            LogManager.getLogger(
+                    LocalFluxEngine.class);
 
     private final ClassLoader classLoader;
 
@@ -154,11 +160,37 @@ public final class LocalFluxEngine
                         jobLogFile);
             }
 
-            PreparedJob preparedJob =
-                    connectorPreparer.prepare(definition);
+            LOG.info(
+                    "Job preparation started: jobName={}, runId={}",
+                    definition.getName(),
+                    runId);
 
-            ExecutionPlan executionPlan =
-                    jobPlanner.plan(preparedJob);
+            PreparedJob preparedJob;
+            ExecutionPlan executionPlan;
+
+            try {
+                preparedJob =
+                        connectorPreparer.prepare(
+                                definition);
+
+                executionPlan =
+                        jobPlanner.plan(
+                                preparedJob);
+            } catch (Exception failure) {
+                LOG.error(
+                        "Job preparation failed: jobName={}, runId={}",
+                        definition.getName(),
+                        runId,
+                        failure);
+                throw failure;
+            } catch (Error failure) {
+                LOG.error(
+                        "Job preparation failed: jobName={}, runId={}",
+                        definition.getName(),
+                        runId,
+                        failure);
+                throw failure;
+            }
 
             JobExecution jobExecution =
                     new JobExecution(
