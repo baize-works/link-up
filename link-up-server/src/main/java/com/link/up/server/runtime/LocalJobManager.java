@@ -315,6 +315,15 @@ public final class LocalJobManager
                     jobExecutor.execute(
                             handle.getDefinition(),
                             new JobExecutionListener() {
+                                public void onJobLogCreated(
+                                        String runId,
+                                        String jobLogFile) {
+
+                                    handle.bindLogIdentity(
+                                            runId,
+                                            jobLogFile);
+                                }
+
                                 public void onJobExecutionCreated(
                                         JobExecution execution) {
 
