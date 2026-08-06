@@ -5,8 +5,8 @@ import com.link.up.api.table.catalog.TablePath;
 import com.link.up.connector.jdbc.catalog.mysql.MySqlCreateTableSqlBuilder;
 import com.link.up.connector.jdbc.catalog.mysql.MySqlTypeMapper;
 import com.link.up.connector.jdbc.config.JdbcConnectionConfig;
+import com.link.up.connector.jdbc.core.dialect.DatabaseIdentifier;
 import com.link.up.connector.jdbc.core.dialect.JdbcDialect;
-import com.link.up.connector.jdbc.core.dialect.JdbcTypeMapper;
 
 /** Generates the CREATE TABLE statement used for offline sink preparation. */
 final class JdbcCreateTableSqlResolver {
@@ -25,10 +25,19 @@ final class JdbcCreateTableSqlResolver {
             return null;
         }
 
-        JdbcTypeMapper typeMapper =
-                dialect.typeMapper();
+        /*
+         * MySqlDialect#typeMapper() returns the runtime mapper from
+         * core.dialect.mysql, while MySqlCreateTableSqlBuilder intentionally
+         * uses the catalog mapper from catalog.mysql. They are different
+         * classes with the same simple name and cannot be cast to each other.
+         *
+         * Use the dialect identifier to select the matching catalog DDL
+         * builder, and construct the same mapper configuration used by
+         * MySqlDialect#createCatalog().
+         */
+        if (DatabaseIdentifier.MYSQL.equalsIgnoreCase(
+                dialect.name())) {
 
-        if (typeMapper instanceof MySqlTypeMapper) {
             TablePath targetPath =
                     resolveTargetPath(
                             connectionConfig,
@@ -46,7 +55,7 @@ final class JdbcCreateTableSqlResolver {
             return new MySqlCreateTableSqlBuilder(
                     targetPath,
                     ddlTable,
-                    (MySqlTypeMapper) typeMapper)
+                    new MySqlTypeMapper(false))
                     .build();
         }
 
