@@ -23,6 +23,8 @@ public final class JobExecutionMetadata {
     private final boolean cancellationRequested;
     private final List<JobStateTransition> transitions;
     private final Map<String, TableDdl> tableDdlsByPipelineId;
+    private final String runId;
+    private final String jobLogFile;
 
     public JobExecutionMetadata(
             String externalExecutionId,
@@ -45,7 +47,9 @@ public final class JobExecutionMetadata {
                 stateVersion,
                 cancellationRequested,
                 transitions,
-                Collections.<String, TableDdl>emptyMap());
+                Collections.<String, TableDdl>emptyMap(),
+                null,
+                null);
     }
 
     public JobExecutionMetadata(
@@ -59,6 +63,35 @@ public final class JobExecutionMetadata {
             boolean cancellationRequested,
             List<JobStateTransition> transitions,
             Map<String, TableDdl> tableDdlsByPipelineId) {
+
+        this(
+                externalExecutionId,
+                idempotencyKey,
+                definitionVersion,
+                configDigest,
+                submittedTimeMillis,
+                queuedTimeMillis,
+                stateVersion,
+                cancellationRequested,
+                transitions,
+                tableDdlsByPipelineId,
+                null,
+                null);
+    }
+
+    public JobExecutionMetadata(
+            String externalExecutionId,
+            String idempotencyKey,
+            int definitionVersion,
+            String configDigest,
+            long submittedTimeMillis,
+            long queuedTimeMillis,
+            long stateVersion,
+            boolean cancellationRequested,
+            List<JobStateTransition> transitions,
+            Map<String, TableDdl> tableDdlsByPipelineId,
+            String runId,
+            String jobLogFile) {
 
         this.externalExecutionId = externalExecutionId;
         this.idempotencyKey = idempotencyKey;
@@ -76,6 +109,8 @@ public final class JobExecutionMetadata {
                 Collections.unmodifiableMap(
                         new LinkedHashMap<String, TableDdl>(
                                 tableDdlsByPipelineId));
+        this.runId = runId;
+        this.jobLogFile = jobLogFile;
     }
 
     public String getExternalExecutionId() {
@@ -120,5 +155,13 @@ public final class JobExecutionMetadata {
 
     public TableDdl getTableDdl(String pipelineId) {
         return tableDdlsByPipelineId.get(pipelineId);
+    }
+
+    public String getRunId() {
+        return runId;
+    }
+
+    public String getJobLogFile() {
+        return jobLogFile;
     }
 }

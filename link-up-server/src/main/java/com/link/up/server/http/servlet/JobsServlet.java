@@ -1,32 +1,29 @@
 package com.link.up.server.http.servlet;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.link.up.api.job.JobSpec;
 import com.link.up.server.dto.JobSubmitRequest;
 import com.link.up.server.http.FluxServlet;
 import com.link.up.server.http.JsonSupport;
 import com.link.up.server.service.JobRestService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-
-// 在类中定义
 
 /**
  * /api/v1/jobs 集合资源。
  */
 public final class JobsServlet
         extends FluxServlet {
+
     private static final Logger LOG =
-            LogManager.getLogger(JobsServlet.class);
-    private static final ObjectMapper FORMATTED_MAPPER = new ObjectMapper()
-            .enable(SerializationFeature.INDENT_OUTPUT);
+            LogManager.getLogger(
+                    JobsServlet.class);
 
     private final JobRestService service;
     private final int maxRequestBytes;
@@ -50,13 +47,7 @@ public final class JobsServlet
                 requestBody(
                         request,
                         maxRequestBytes);
-        LOG.info(
-                "Received job submission, contentType={}, body={}",
-                request.getContentType(),
-                FORMATTED_MAPPER.writeValueAsString(
-                        FORMATTED_MAPPER.readValue(body, Object.class)
-                )
-        );
+
         Object result;
 
         if (isJson(request)) {
@@ -67,12 +58,23 @@ public final class JobsServlet
                                         body,
                                         JobSubmitRequest.class);
 
+                logSubmissionSummary(
+                        request,
+                        submitRequest,
+                        body);
+
                 result = service.submit(submitRequest);
             } catch (JsonProcessingException exception) {
                 throw new IllegalArgumentException(
                         "Invalid JSON submit request");
             }
         } else {
+            LOG.info(
+                    "Received legacy job submission, contentType={}, bodyBytes={}",
+                    safeLogValue(
+                            request.getContentType()),
+                    utf8Length(body));
+
             result = service.submitLegacyResponse(body);
         }
 
@@ -108,6 +110,70 @@ public final class JobsServlet
                         request.getParameter("status"),
                         page,
                         pageSize));
+    }
+
+    private void logSubmissionSummary(
+            HttpServletRequest request,
+            JobSubmitRequest submitRequest,
+            String body) {
+
+        JobSpec jobSpec =
+                submitRequest == null
+                        ? null
+                        : submitRequest.getJobSpec();
+
+        LOG.info(
+                "Received job submission, contentType={}, bodyBytes={}, externalExecutionId={}, definitionVersion={}, jobName={}, sourceConnector={}, sinkConnector={}",
+                safeLogValue(
+                        request.getContentType()),
+                utf8Length(body),
+                safeLogValue(
+                        submitRequest == null
+                                ? null
+                                : submitRequest.getExternalExecutionId()),
+                submitRequest == null
+                        ? null
+                        : submitRequest.getDefinitionVersion(),
+                safeLogValue(
+                        jobSpec == null
+                                ? null
+                                : jobSpec.getName()),
+                safeLogValue(
+                        connectorId(
+                                jobSpec == null
+                                        ? null
+                                        : jobSpec.getSource())),
+                safeLogValue(
+                        connectorId(
+                                jobSpec == null
+                                        ? null
+                                        : jobSpec.getSink())));
+    }
+
+    private String connectorId(
+            JobSpec.Connector connector) {
+
+        return connector == null
+                ? null
+                : connector.getConnectorId();
+    }
+
+    private String safeLogValue(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        return value.replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace('\t', ' ');
+    }
+
+    private int utf8Length(String value) {
+        return value == null
+                ? 0
+                : value.getBytes(
+                        StandardCharsets.UTF_8)
+                        .length;
     }
 
     private boolean isJson(HttpServletRequest request) {

@@ -65,6 +65,23 @@ public final class JobResourceServlet
                 write(response, 200, service.metrics(jobId));
                 return;
             }
+
+            if ("logs".equals(resource)) {
+                write(
+                        response,
+                        200,
+                        service.logs(
+                                jobId,
+                                longParameter(
+                                        request,
+                                        "cursor",
+                                        0L),
+                                intParameter(
+                                        request,
+                                        "limit",
+                                        500)));
+                return;
+            }
         }
 
         throw new JobNotFoundException(

@@ -47,6 +47,8 @@ final class JobExecutionHandle {
     private volatile Future<?> future;
     private volatile JobResult result;
     private volatile Throwable failure;
+    private volatile String runId;
+    private volatile String jobLogFile;
 
     JobExecutionHandle(
             String jobId,
@@ -119,6 +121,21 @@ final class JobExecutionHandle {
         return true;
     }
 
+    synchronized void bindLogIdentity(
+            String runId,
+            String jobLogFile) {
+
+        this.runId =
+                requireText(
+                        runId,
+                        "runId");
+
+        this.jobLogFile =
+                requireText(
+                        jobLogFile,
+                        "jobLogFile");
+    }
+
     synchronized void bindExecution(
             JobExecution execution) {
 
@@ -126,6 +143,10 @@ final class JobExecutionHandle {
                 Objects.requireNonNull(
                         execution,
                         "execution must not be null");
+
+        bindLogIdentity(
+                execution.getRunId(),
+                execution.getJobLogFile());
 
         if (cancellationRequested) {
             execution.cancel();
@@ -270,7 +291,9 @@ final class JobExecutionHandle {
                 stateVersion,
                 cancellationRequested,
                 transitions,
-                tableDdls);
+                tableDdls,
+                runId,
+                jobLogFile);
     }
 
     boolean isCancellationRequested() {
@@ -316,5 +339,19 @@ final class JobExecutionHandle {
 
     Throwable getFailure() {
         return failure;
+    }
+
+    private static String requireText(
+            String value,
+            String name) {
+
+        if (value == null
+                || value.trim().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    name + " must not be blank");
+        }
+
+        return value.trim();
     }
 }

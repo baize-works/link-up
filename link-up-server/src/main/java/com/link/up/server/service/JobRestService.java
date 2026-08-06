@@ -8,6 +8,7 @@ import com.link.up.api.job.JobSpec;
 import com.link.up.framework.job.JobConfigParser;
 import com.link.up.framework.job.JobDefinition;
 import com.link.up.framework.job.JobSpecCompiler;
+import com.link.up.server.dto.JobLogPageResponse;
 import com.link.up.server.dto.JobResponse;
 import com.link.up.server.dto.JobSubmitRequest;
 import com.link.up.server.dto.PageResponse;
@@ -37,6 +38,7 @@ public final class JobRestService {
     private final JobConfigParser hoconParser;
     private final JobSpecCompiler jobSpecCompiler;
     private final ObjectMapper protocolMapper;
+    private final JobLogReader jobLogReader;
     private final WorkerIdentity workerIdentity;
     private final int maxConcurrentJobs;
     private final int maxQueuedJobs;
@@ -56,6 +58,7 @@ public final class JobRestService {
         this.protocolMapper = new ObjectMapper()
                 .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
                 .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        this.jobLogReader = new JobLogReader();
         this.workerIdentity = workerIdentity;
         this.maxConcurrentJobs = maxConcurrentJobs;
         this.maxQueuedJobs = maxQueuedJobs;
@@ -125,6 +128,23 @@ public final class JobRestService {
         return Collections.unmodifiableList(tasks);
     }
     public JobSnapshot.Metrics metrics(String jobId) { return manager.getJob(jobId).getMetrics(); }
+
+    public JobLogPageResponse logs(
+            String jobId,
+            long cursor,
+            int limit) {
+
+        JobSnapshot snapshot = manager.getJob(jobId);
+        JobExecutionMetadata metadata =
+                manager.getMetadata(jobId);
+
+        return jobLogReader.read(
+                jobId,
+                metadata,
+                snapshot.getStatus().isTerminal(),
+                cursor,
+                limit);
+    }
 
     public PageResponse<JobSnapshot.Summary> jobs(String statusValue, int page, int pageSize) {
         List<JobSnapshot.Summary> summaries = new ArrayList<JobSnapshot.Summary>();

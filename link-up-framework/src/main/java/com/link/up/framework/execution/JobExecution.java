@@ -35,6 +35,9 @@ public final class JobExecution {
 
     private final ExecutionPlan executionPlan;
     private final ClassLoader classLoader;
+    private final long startTimeMillis;
+    private final String runId;
+    private final String jobLogFile;
     private final CancellationToken cancellationToken =
             new CancellationToken();
     private final JobMetrics jobMetrics =
@@ -43,6 +46,32 @@ public final class JobExecution {
     public JobExecution(
             ExecutionPlan executionPlan,
             ClassLoader classLoader) {
+
+        this(
+                executionPlan,
+                classLoader,
+                LogIdentity.create(executionPlan));
+    }
+
+    private JobExecution(
+            ExecutionPlan executionPlan,
+            ClassLoader classLoader,
+            LogIdentity identity) {
+
+        this(
+                executionPlan,
+                classLoader,
+                identity.startTimeMillis,
+                identity.runId,
+                identity.jobLogFile);
+    }
+
+    public JobExecution(
+            ExecutionPlan executionPlan,
+            ClassLoader classLoader,
+            long startTimeMillis,
+            String runId,
+            String jobLogFile) {
 
         this.executionPlan =
                 Objects.requireNonNull(
@@ -53,40 +82,40 @@ public final class JobExecution {
                 Objects.requireNonNull(
                         classLoader,
                         "classLoader");
+
+        if (startTimeMillis < 0L) {
+            throw new IllegalArgumentException(
+                    "startTimeMillis must not be negative");
+        }
+
+        this.startTimeMillis = startTimeMillis;
+        this.runId = requireText(runId, "runId");
+        this.jobLogFile =
+                requireText(
+                        jobLogFile,
+                        "jobLogFile");
     }
 
     public JobResult execute() {
-        final long start =
-                System.currentTimeMillis();
-
         final String jobName =
                 executionPlan.getJobName();
 
-        final String jobId =
-                JobLogFileName.createJobId(
-                        jobName,
-                        start);
-
-        final String jobLogFile =
-                JobLogFileName.create(
-                        jobName,
-                        start);
-
         try (CloseableThreadContext.Instance ignored =
                      openJobLogContext(
-                             jobId,
+                             runId,
                              jobName,
                              jobLogFile)) {
 
             LOG.info(
-                    "Job started: jobName={}, jobLogFile={}",
+                    "Job started: jobName={}, runId={}, jobLogFile={}",
                     jobName,
+                    runId,
                     jobLogFile);
 
             JobResult result =
                     executeInternal(
-                            start,
-                            jobId,
+                            startTimeMillis,
+                            runId,
                             jobLogFile);
 
             if (result.getStatus()
@@ -115,8 +144,8 @@ public final class JobExecution {
 
     private JobResult executeInternal(
             long start,
-            final String jobId,
-            final String jobLogFile) {
+            final String currentRunId,
+            final String currentJobLogFile) {
 
         List<PipelineResult> results =
                 new ArrayList<PipelineResult>();
@@ -154,9 +183,9 @@ public final class JobExecution {
                                         public PipelineResult call() {
                                             try (CloseableThreadContext.Instance ignored =
                                                          openJobLogContext(
-                                                                 jobId,
+                                                                 currentRunId,
                                                                  executionPlan.getJobName(),
-                                                                 jobLogFile)) {
+                                                                 currentJobLogFile)) {
 
                                                 return new PipelineExecution(
                                                         pipelinePlan,
@@ -234,20 +263,23 @@ public final class JobExecution {
 
     private static CloseableThreadContext.Instance
     openJobLogContext(
-            String jobId,
+            String currentRunId,
             String jobName,
-            String jobLogFile) {
+            String currentJobLogFile) {
 
         return CloseableThreadContext
                 .put(
+                        "runId",
+                        currentRunId)
+                .put(
                         "jobId",
-                        jobId)
+                        currentRunId)
                 .put(
                         "jobName",
                         jobName)
                 .put(
                         "jobLogFile",
-                        jobLogFile);
+                        currentJobLogFile);
     }
 
     private CommitSummary merge(
@@ -311,10 +343,71 @@ public final class JobExecution {
         return jobMetrics;
     }
 
+    public String getRunId() {
+        return runId;
+    }
+
+    public String getJobLogFile() {
+        return jobLogFile;
+    }
+
     /**
      * 当前 Job 是否已经收到取消请求。
      */
     public boolean isCancellationRequested() {
         return cancellationToken.isCancelled();
+    }
+
+    private static String requireText(
+            String value,
+            String name) {
+
+        if (value == null
+                || value.trim().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    name + " must not be blank");
+        }
+
+        return value.trim();
+    }
+
+    private static final class LogIdentity {
+        private final long startTimeMillis;
+        private final String runId;
+        private final String jobLogFile;
+
+        private LogIdentity(
+                long startTimeMillis,
+                String runId,
+                String jobLogFile) {
+
+            this.startTimeMillis = startTimeMillis;
+            this.runId = runId;
+            this.jobLogFile = jobLogFile;
+        }
+
+        private static LogIdentity create(
+                ExecutionPlan executionPlan) {
+
+            Objects.requireNonNull(
+                    executionPlan,
+                    "executionPlan");
+
+            long start =
+                    System.currentTimeMillis();
+
+            String jobName =
+                    executionPlan.getJobName();
+
+            return new LogIdentity(
+                    start,
+                    JobLogFileName.createJobId(
+                            jobName,
+                            start),
+                    JobLogFileName.create(
+                            jobName,
+                            start));
+        }
     }
 }

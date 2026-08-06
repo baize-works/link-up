@@ -95,6 +95,27 @@ public abstract class FluxServlet
         }
     }
 
+    protected long longParameter(
+            HttpServletRequest request,
+            String name,
+            long defaultValue) {
+
+        String value =
+                request.getParameter(name);
+
+        if (value == null
+                || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(
+                    name + " must be a long integer");
+        }
+    }
+
     protected List<String> pathSegments(
             HttpServletRequest request) {
 

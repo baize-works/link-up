@@ -73,6 +73,8 @@ Worker 会对规范化后的 `jobSpec` 计算配置摘要。相同 `externalExec
 
 JSON 请求必须且只能包含 `jobSpec` 或 `hocon` 其中一个。`hocon`、`application/hocon` 和 `text/plain` 仍保留给 CLI 与迁移场景，控制面必须使用结构化 `jobSpec`。完整字段说明见 `docs/job-spec.md`。
 
+提交入口只记录 `externalExecutionId`、定义版本、任务名称和 Connector 类型等摘要，不记录完整 JobSpec、用户名、密码、Token 或其他 Connector options。
+
 ## 查询与取消
 
 ```http
@@ -83,10 +85,44 @@ GET /api/v1/jobs?status=RUNNING&page=1&pageSize=20
 GET /api/v1/jobs/{jobId}/pipelines
 GET /api/v1/jobs/{jobId}/tasks
 GET /api/v1/jobs/{jobId}/metrics
+GET /api/v1/jobs/{jobId}/logs?cursor=0&limit=500
 DELETE /api/v1/jobs/{jobId}
 ```
 
 提交请求超时后，控制面应优先使用 `externalExecutionId` 查询，不能直接生成新执行实例重复提交。
+
+## 增量运行日志
+
+每个 Framework Run 生成一个文件系统安全的 `runId` 和独立日志文件。Connector 准备、自动建表、Split 规划、Pipeline 和 Task 执行共享同一日志上下文。
+
+日志接口使用不透明的字节偏移游标：
+
+```json
+{
+  "jobId": "flux-1785977590967-1",
+  "externalExecutionId": "yak-offline-21d1f420-c9e7-4d3b-a5c7-87e52899958c",
+  "runId": "MYSQL_MYSQL_-1785977593842",
+  "items": [
+    {
+      "sequence": 0,
+      "timestampMillis": 1785977593855,
+      "source": "LINK_UP",
+      "level": "INFO",
+      "thread": "link-up-job-1",
+      "logger": "c.l.u.f.e.JobExecution",
+      "message": "Job started: jobName=MYSQL → MYSQL 离线同步"
+    }
+  ],
+  "nextCursor": 226,
+  "completed": false
+}
+```
+
+- 首次读取使用 `cursor=0`；后续请求原样传回 `nextCursor`。
+- `limit` 范围为 1～1000，按日志事件计数；多行 SQL 和异常堆栈会归入同一条事件。
+- `completed=true` 表示 Job 已进入终态，并且游标已经读取到当前日志文件末尾。
+- 接口只允许读取 Worker 自己记录的文件名，不接受任意文件路径。
+- Job 日志仍受 Log4j RollingFile 的保留和归档策略约束；控制面需要长期审计时，应在执行完成后主动归档或采集。
 
 ## 离线建表结果
 
@@ -136,5 +172,6 @@ JDBC Sink 在准备每个数据集时会生成最终目标表的 `CREATE TABLE` 
 
 - `SUBMITTED`、`QUEUED`：每 2～3 秒查询。
 - `RUNNING`：每 3～5 秒查询，长任务可退避到 15～30 秒。
-- 终态：停止轮询。
+- 运行日志使用 `nextCursor` 增量读取，不要每次从 0 重放完整文件。
+- 终态：完成最后一次日志读取后停止轮询。
 - 更新前比较 `stateVersion`，只接受更高版本的状态。
