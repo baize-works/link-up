@@ -1,8 +1,12 @@
 package com.link.up.server.runtime;
 
+import com.link.up.api.sink.TableDdl;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 作业协议元数据和状态机快照。
@@ -18,6 +22,7 @@ public final class JobExecutionMetadata {
     private final long stateVersion;
     private final boolean cancellationRequested;
     private final List<JobStateTransition> transitions;
+    private final Map<String, TableDdl> tableDdlsByPipelineId;
 
     public JobExecutionMetadata(
             String externalExecutionId,
@@ -29,6 +34,31 @@ public final class JobExecutionMetadata {
             long stateVersion,
             boolean cancellationRequested,
             List<JobStateTransition> transitions) {
+
+        this(
+                externalExecutionId,
+                idempotencyKey,
+                definitionVersion,
+                configDigest,
+                submittedTimeMillis,
+                queuedTimeMillis,
+                stateVersion,
+                cancellationRequested,
+                transitions,
+                Collections.<String, TableDdl>emptyMap());
+    }
+
+    public JobExecutionMetadata(
+            String externalExecutionId,
+            String idempotencyKey,
+            int definitionVersion,
+            String configDigest,
+            long submittedTimeMillis,
+            long queuedTimeMillis,
+            long stateVersion,
+            boolean cancellationRequested,
+            List<JobStateTransition> transitions,
+            Map<String, TableDdl> tableDdlsByPipelineId) {
 
         this.externalExecutionId = externalExecutionId;
         this.idempotencyKey = idempotencyKey;
@@ -42,6 +72,10 @@ public final class JobExecutionMetadata {
                 Collections.unmodifiableList(
                         new ArrayList<JobStateTransition>(
                                 transitions));
+        this.tableDdlsByPipelineId =
+                Collections.unmodifiableMap(
+                        new LinkedHashMap<String, TableDdl>(
+                                tableDdlsByPipelineId));
     }
 
     public String getExternalExecutionId() {
@@ -78,5 +112,13 @@ public final class JobExecutionMetadata {
 
     public List<JobStateTransition> getTransitions() {
         return transitions;
+    }
+
+    public Map<String, TableDdl> getTableDdlsByPipelineId() {
+        return tableDdlsByPipelineId;
+    }
+
+    public TableDdl getTableDdl(String pipelineId) {
+        return tableDdlsByPipelineId.get(pipelineId);
     }
 }

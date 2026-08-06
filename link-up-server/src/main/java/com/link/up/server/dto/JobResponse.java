@@ -1,11 +1,13 @@
 package com.link.up.server.dto;
 
+import com.link.up.api.sink.TableDdl;
 import com.link.up.server.runtime.JobExecutionMetadata;
 import com.link.up.server.runtime.JobSnapshot;
 import com.link.up.server.runtime.JobStateTransition;
 import com.link.up.server.runtime.ServerJobStatus;
 import com.link.up.server.runtime.WorkerIdentity;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -117,8 +119,24 @@ public final class JobResponse {
         return snapshot.getCommitSummary();
     }
 
-    public List<JobSnapshot.Pipeline> getPipelines() {
-        return snapshot.getPipelines();
+    public List<PipelineResponse> getPipelines() {
+        List<PipelineResponse> result =
+                new ArrayList<PipelineResponse>();
+
+        for (JobSnapshot.Pipeline pipeline :
+                snapshot.getPipelines()) {
+            TableDdl tableDdl = metadata == null
+                    ? null
+                    : metadata.getTableDdl(
+                            pipeline.getPipelineId());
+
+            result.add(
+                    new PipelineResponse(
+                            pipeline,
+                            tableDdl));
+        }
+
+        return Collections.unmodifiableList(result);
     }
 
     public List<JobStateTransition> getTransitions() {

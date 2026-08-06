@@ -11,6 +11,7 @@ import com.link.up.framework.job.JobSpecCompiler;
 import com.link.up.server.dto.JobResponse;
 import com.link.up.server.dto.JobSubmitRequest;
 import com.link.up.server.dto.PageResponse;
+import com.link.up.server.dto.PipelineResponse;
 import com.link.up.server.dto.WorkerNodeResponse;
 import com.link.up.server.runtime.JobExecutionMetadata;
 import com.link.up.server.runtime.JobManager;
@@ -113,12 +114,12 @@ public final class JobRestService {
     public JobResponse jobByExternalExecutionId(String externalExecutionId) {
         return response(manager.getJobByExternalExecutionId(externalExecutionId));
     }
-    public List<JobSnapshot.Pipeline> pipelines(String jobId) {
-        return manager.getJob(jobId).getPipelines();
+    public List<PipelineResponse> pipelines(String jobId) {
+        return response(manager.getJob(jobId)).getPipelines();
     }
     public List<JobSnapshot.Task> tasks(String jobId) {
         List<JobSnapshot.Task> tasks = new ArrayList<JobSnapshot.Task>();
-        for (JobSnapshot.Pipeline pipeline : pipelines(jobId)) {
+        for (PipelineResponse pipeline : pipelines(jobId)) {
             tasks.addAll(pipeline.getTasks());
         }
         return Collections.unmodifiableList(tasks);
